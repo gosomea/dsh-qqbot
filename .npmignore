@@ -8,3 +8,11 @@ docs/
 .dsh-sessions/
 *.tsbuildinfo
 node_modules/
+
+# Repository-only verification tools and Agent instructions
+tests/
+scripts/verify-qqbot.mjs
+TESTING.md
+.agents/
+.codex/
+.claude/
