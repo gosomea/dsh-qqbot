@@ -189,6 +189,7 @@ export function installConversationStyles(): void {
 .imqq-rail { align-items: center; padding-inline: 0; gap: 6px; padding-top: 6px; }
 .imqq-editModal { width: min(440px, calc(100vw - 32px)); }
 .imqq-editForm { display: grid; gap: 14px; font: 13px/1.5 var(--dsw-font-family); color: var(--dsw-alias-label-primary); }
+.imqq-editForm .imqc-field { margin: 0; }
 .imqq-dialogHint { margin: 0 0 10px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
 .imqq-dialogActions { display: flex; justify-content: flex-end; gap: 8px; }
 .imqq-welcome { margin: auto; max-width: 560px; padding: 32px; text-align: center; }

@@ -73,7 +73,7 @@ export interface WorkspaceCwdSelectProps {
 export function WorkspaceCwdSelect({ value, workspaces, defaultCwd, defaultWorkspaceName = '默认工作区', disabled = false, label = '工作目录', onAddWorkspace, onChange }: WorkspaceCwdSelectProps): ReactNode {
   const ADD = '::add-workspace';
   const options: QQSelectOption[] = [
-    { value: '', label: '留空使用 QQ 默认工作目录', description: defaultCwd },
+    { value: '', label: '不指定工作区（QQ 临时目录）', description: defaultCwd },
     ...workspaces.map(ws => ({ value: ws.path, label: qqWorkspaceTitle(ws.title, ws.path, defaultWorkspaceName), description: ws.path })),
     ...(onAddWorkspace ? [{ value: ADD, label: '＋ 添加工作区（选择文件夹…）' }] : []),
   ];
@@ -83,6 +83,5 @@ export function WorkspaceCwdSelect({ value, workspaces, defaultCwd, defaultWorks
     h(QQSelect, { label, value: visible, disabled, placeholder: '选择工作区', options, onChange: id => {
       if (id === ADD) { onAddWorkspace?.(); return; }
       onChange(id);
-    } }),
-    defaultCwd ? h('p', { className: 'imqc-hint' }, `留空时使用默认工作目录：${defaultCwd}`) : null);
+    } }));
 }
