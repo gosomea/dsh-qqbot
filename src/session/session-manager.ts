@@ -237,7 +237,14 @@ export class SessionManager {
   getEffectiveModel(scope: ChatScope, peerId: string): ModelRoute | undefined {
     return this.getEffectiveModelByKey(this.sessionKey(scope, peerId));
   }
-  private getEffectiveModelByKey(key: string): ModelRoute | undefined { const entry = this.conversations?.store.get(key); return entry?.settings ? entry.settings.model ?? this.getDefaultModel() : this.modelResolver.getEffectiveRoute(key); }
+  private getEffectiveModelByKey(key: string): ModelRoute | undefined {
+    const entry = this.conversations?.store.get(key);
+    if (!entry?.settings) return this.modelResolver.getEffectiveRoute(key);
+    if (entry.settings.model) return entry.settings.model;
+    // Inherit the host default model, applying the conversation's stored default effort when set.
+    const base = this.getDefaultModel();
+    return entry.settings.reasoningEffort ? { ...base, reasoningEffort: entry.settings.reasoningEffort } : base;
+  }
   async validateModelSetting(route: ModelRoute): Promise<ModelRoute> { return this.modelResolver.validateRoute(route); }
 
   getDefaultModel(): ModelRoute {

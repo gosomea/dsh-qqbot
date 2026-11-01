@@ -8,6 +8,8 @@ export type QQExecutionSettings =
 export interface QQAgentSettings {
   preset: string;
   model: { provider: string; model: string; reasoningEffort?: import('@deepseek-ai/dsh-llm').ReasoningEffortId } | null;
+  /** Reasoning effort applied to the inherited default model when `model` is null. Ignored when a concrete model carries its own effort. */
+  reasoningEffort?: import('@deepseek-ai/dsh-llm').ReasoningEffortId;
   prompt: string;
   cwd: string;
   execution: QQExecutionSettings;
@@ -60,7 +62,8 @@ export function validateQQAgentSettings(value: unknown): QQAgentSettings {
   const cwd = text(data.cwd, '工作目录', 4096).trim();
   if (cwd && !cwd.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(cwd)) throw new TypeError('工作目录必须使用绝对路径');
   if (typeof data.slashCommands !== 'boolean') throw new TypeError('QQ 斜杠命令开关无效');
-  return { preset: text(data.preset, 'Agent 预设', 256).trim(), model, prompt: text(data.prompt, '提示词', 80000), cwd, execution: checkedExecution, slashCommands: data.slashCommands };
+  const defaultEffort = data.reasoningEffort === undefined || data.reasoningEffort === null ? undefined : text(data.reasoningEffort, '推理强度', 64).trim();
+  return { preset: text(data.preset, 'Agent 预设', 256).trim(), model, ...(defaultEffort ? { reasoningEffort: defaultEffort as ReasoningEffortId } : {}), prompt: text(data.prompt, '提示词', 80000), cwd, execution: checkedExecution, slashCommands: data.slashCommands };
 }
 
 export function validateQQDefaults(value: unknown): QQDefaults {

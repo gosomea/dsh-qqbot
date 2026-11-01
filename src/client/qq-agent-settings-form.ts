@@ -72,10 +72,12 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
   const toggleCollapsed = (category: string): void => setCollapsedCats(prev => { const next = new Set(prev); if (next.has(category)) next.delete(category); else next.add(category); return next; });
   const setExecution = (next: QQExecutionSettings): void => onChange({ ...settings, execution: next });
   const setTools = (values: Iterable<string>): void => setExecution({ kind: 'custom', permission: execution.permission, tools: [...new Set(values)].sort() });
-  const currentChoice = model ? findModel(catalog.models, model) : undefined;
+  // 选中的具体模型；未选（继承默认）时退回宿主默认模型，用它的 efforts 也能配推理强度。
+  const currentChoice = model ? findModel(catalog.models, model) : (catalog.models?.defaultModel ? findModel(catalog.models, catalog.models.defaultModel) : undefined);
   const effortOptions: QQSelectOption[] = (currentChoice?.efforts ?? []).map(effort => ({ value: effort.id, label: effort.name, ...(effort.description === undefined ? {} : { description: effort.description }) }));
   const showEffort = effortOptions.length > 0;
-  const selectedEffort = model?.reasoningEffort ?? currentChoice?.defaultEffort ?? effortOptions[0]?.value ?? '';
+  // 具体模型读 model.reasoningEffort；继承默认时读顶层的 settings.reasoningEffort。
+  const selectedEffort = (model ? model.reasoningEffort : settings.reasoningEffort) ?? currentChoice?.defaultEffort ?? effortOptions[0]?.value ?? '';
   const setModelWithEffort = (next: QQAgentSettings['model']): void => {
     if (next === null) { onChange({ ...settings, model: null }); return; }
     const choice = findModel(catalog.models, next);
@@ -83,13 +85,17 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
     const effort = next.reasoningEffort ?? choice?.defaultEffort ?? efforts[0]?.id;
     onChange({ ...settings, model: { provider: next.provider, model: next.model, ...(effort ? { reasoningEffort: effort as ReasoningEffortId } : {}) } });
   };
+  const setEffort = (effort: string): void => {
+    if (model) onChange({ ...settings, model: { ...model, reasoningEffort: effort as ReasoningEffortId } });
+    else onChange({ ...settings, reasoningEffort: effort as ReasoningEffortId });
+  };
   return h('div', { className: 'imqc-agentSettings' },
     h('div', { className: 'imqc-field' }, h('span', null, '模型'), h(QQSelect, { label: '模型', value: model ? modelChoiceId(model) : 'inherit', options: modelOptions, disabled, onOpen: onRefreshCatalog, onChange: value => {
       if (value === 'inherit') { onChange({ ...settings, model: null }); return; }
       const choice = catalog.models?.groups.flatMap(group => group.models).find(candidate => modelChoiceId(candidate) === value);
       if (choice) setModelWithEffort({ provider: choice.provider, model: choice.model });
     } })),
-    showEffort ? h('div', { className: 'imqc-field' }, h('span', null, '推理强度'), h(QQSelect, { label: '推理强度', value: selectedEffort, options: effortOptions, disabled, onChange: effort => { if (model) onChange({ ...settings, model: { ...model, reasoningEffort: effort as ReasoningEffortId } }); } })) : null,
+    showEffort ? h('div', { className: 'imqc-field' }, h('span', null, '推理强度'), h(QQSelect, { label: '推理强度', value: selectedEffort, options: effortOptions, disabled, onChange: setEffort })) : null,
     h('div', { className: 'imqc-field' }, h('span', null, 'Agent 预设'), h(QQSelect, { label: 'Agent 预设', value: settings.preset, options: presetOptions, disabled, onOpen: onRefreshCatalog, onChange: preset => onChange({ ...settings, preset }) })),
     h('p', { className: 'imqc-hint' }, 'Agent 预设决定使用哪个 Agent；执行权限决定该 Agent 可执行的操作。'),
     h('div', { className: 'imqc-field' }, h('span', null, '执行权限'), h(QQSelect, { label: '执行权限', value: execution.kind === 'custom' ? 'custom' : execution.permission, disabled, options: [...PERMISSIONS, { value: 'custom', label: '自定义工具' }], onChange: value => {

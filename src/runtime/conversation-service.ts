@@ -87,7 +87,8 @@ export class ConversationService {
       policy.allowedPresets = [manager.getDefaultPreset?.() || 'standard'];
       return policy;
     }, defaultSettings: () => ({ ...defaultQQAgentSettings(), preset: config.preset?.trim() || '', model: config.provider && config.model ? { provider: config.provider, model: config.model } : null, cwd: config.cwd || '', prompt: config.groupPrompt || config.directPrompt || '' }),
-      resolveSettings: settings => ({ ...settings, preset: settings.preset || manager.getDefaultPreset?.() || '', model: settings.model ?? manager.getDefaultModel(), cwd: settings.cwd || resolveAgentCwd(config.cwd) }),
+      // Keep model === null as "inherit host default"; the default reasoning effort rides on settings.reasoningEffort.
+      resolveSettings: settings => ({ ...settings, preset: settings.preset || manager.getDefaultPreset?.() || '', cwd: settings.cwd || resolveAgentCwd(config.cwd) }),
       projectSettings: entry => ({ ...defaultQQAgentSettings(), preset: manager.getEffectivePreset?.(entry.scope, entry.peerId) || manager.getDefaultPreset?.() || config.preset || '', model: manager.getEffectiveModel?.(entry.scope, entry.peerId) ?? manager.getDefaultModel(), cwd: entry.policy.cwd || resolveAgentCwd(config.cwd), prompt: [(entry.scope === 'group' ? config.groupPrompt : config.directPrompt), this.describeRole(entry.policy.role)].filter(Boolean).join('\n'), execution: entry.policy.nativeTools === true ? { kind: 'native', permission: entry.policy.resources.sandbox } : { kind: 'custom', permission: entry.policy.resources.sandbox, tools: Object.entries(entry.policy.tools).filter(([, decision]) => decision !== 'deny').map(([id]) => id) } }),
     });
     this.store.migratePrefs();

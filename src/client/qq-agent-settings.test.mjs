@@ -91,6 +91,21 @@ describe('shared Agent settings draft form', () => {
     await click('清空选择'); expect(changes.mock.calls.at(-1)[0].execution.tools).toEqual([]);
     await click('完成选择');
   });
+  it('shows reasoning effort for the inherited default model and stores it at top level', async () => {
+    const changes = vi.fn();
+    const effortCatalog = { loading: false, errors: [], presets: [], models: { groups: [{ id: 'p', name: 'P', models: [
+      { provider: 'p', model: 'm', name: 'M', description: undefined, efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }], defaultEffort: 'low' },
+    ] }], failures: [], defaultModel: { provider: 'p', model: 'm' } } };
+    function Form() { const [draft, update] = useState(settings({ model: null })); return h(QQAgentSettingsForm, { settings: draft, tools, catalog: effortCatalog, onRefreshCatalog: vi.fn(), onChange: next => { update(next); changes(next); } }); }
+    await act(async () => root.render(h(Form)));
+    // inherit mode (model null) still shows effort, seeded from the default model's defaultEffort
+    expect(container.querySelector('[aria-label^="推理强度："]')).not.toBeNull();
+    expect(container.querySelector('[aria-label^="推理强度："]').textContent).toContain('Low');
+    await choose('推理强度', 'High');
+    const selected = changes.mock.calls.at(-1)[0];
+    expect(selected.model).toBeNull();
+    expect(selected.reasoningEffort).toBe('high');
+  });
   it('selects the actual Agent preset independently of model and permission', async () => {
     const changes = vi.fn();
     function Form() { const [draft, update] = useState(settings()); return h(QQAgentSettingsForm, { settings: draft, tools, catalog, onRefreshCatalog: vi.fn(), onChange: next => { update(next); changes(next); } }); }
