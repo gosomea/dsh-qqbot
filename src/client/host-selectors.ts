@@ -3,6 +3,8 @@ export interface SelectorSource {
   modelCatalog(): Promise<unknown>;
   listAgentPresets(): Promise<unknown>;
   permissionCatalog?(): Promise<unknown>;
+  /** Open the Host-native directory picker; resolves to an absolute path or null when cancelled. */
+  pickDirectory?(): Promise<string | null>;
 }
 
 export interface ModelChoice {

@@ -14,8 +14,9 @@ import { createQQAnswerAction } from './conversation-answer-action.ts';
 import { QQConversationView, QQConversationOverlay } from './conversation-panel.ts';
 import { QQSessionStore, useQQSessionStore } from './qq-session-store.ts';
 import type { SelectorSource } from './host-selectors.ts';
+import type { QQTranslate } from './qq-locale.ts';
 
-export function installNativeQQConversation(ctx: Context, store: QQSessionStore, selectorSource: SelectorSource): void {
+export function installNativeQQConversation(ctx: Context, store: QQSessionStore, selectorSource: SelectorSource, t: QQTranslate): void {
   installConversationStyles();
   ctx.effect(() => store.start(), 'im-qqbot.conversation-directory');
   const Badge = ({ sessionId }: PropsRuntime<'sidebar.session.row.trailing'>): ReactNode => {
@@ -35,11 +36,11 @@ export function installNativeQQConversation(ctx: Context, store: QQSessionStore,
   ctx.inject(['uiSession'], (viewCtx) => {
     const stopSeat = viewCtx.slots.inject('conversation.view', () => installQQConversationViewRegistration({
       current: viewCtx.uiSession.adapter.current, store,
-      register: () => viewCtx.slots.register({ name: 'conversation.view', id: 'qqbot-settings', order: 20, label: 'QQ 机器人会话设置' },
-        (props: PropsRuntime<'conversation.view'>) => h(QQConversationView, { store, selectorSource, sessionId: props.sessionId, useProjection: props.useProjection, useSessions: props.useSessions, useWorkspaces: props.useWorkspaces, defaultWorkspaceName: ctx.locale.bind('common')('workspace.defaultName') })),
+      register: () => viewCtx.slots.register({ name: 'conversation.view', id: 'qqbot-settings', order: 20, label: t('view.settings.title') },
+        (props: PropsRuntime<'conversation.view'>) => h(QQConversationView, { store, selectorSource, t, sessionId: props.sessionId, useProjection: props.useProjection, useSessions: props.useSessions, useWorkspaces: props.useWorkspaces, defaultWorkspaceName: ctx.locale.bind('common')('workspace.defaultName') })),
     }));
     return stopSeat;
   });
   ctx.slots.inject('conversation.chat.assistant-actions', () => ctx.slots.register({ name: 'conversation.chat.assistant-actions', id: 'qqbot-send-answer', order: 30 }, createQQAnswerAction(store)));
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'qqbot-conversation' }, (props: PropsRuntime<'shell.overlay'>) => h(QQConversationOverlay, { store, selectorSource, useWorkspaces: props.useWorkspaces, useSessions: props.useSessions, defaultWorkspaceName: ctx.locale.bind('common')('workspace.defaultName') })));
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'qqbot-conversation' }, (props: PropsRuntime<'shell.overlay'>) => h(QQConversationOverlay, { store, selectorSource, t, useWorkspaces: props.useWorkspaces, useSessions: props.useSessions, defaultWorkspaceName: ctx.locale.bind('common')('workspace.defaultName') })));
 }

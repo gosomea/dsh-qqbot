@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client';
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client';
 import { QQSidebar, type QQSidebarActions } from './qq-sidebar.ts';
+import { bindQQ, registerQQLocale, type QQTranslate } from './qq-locale.ts';
 import { installQQSidebarNavigation, QQ_MAIN_PANEL_ID } from './qq-sidebar-navigation.ts';
 
 declare module '@deepseek-ai/dsh-api-session-controller/client' {
@@ -40,19 +41,24 @@ interface SlotsLike {
 }
 
 /** 设置页栏目：共享一份绑定状态轮询，驱动绑定面板与配置刷新 */
-function QQBotSettingsSection({ selectorSource, store }: { selectorSource: SelectorSource; store: QQSessionStore }): ReactNode {
+function QQBotSettingsSection({ selectorSource, store, t }: { selectorSource: SelectorSource; store: QQSessionStore; t: QQTranslate }): ReactNode {
   const { state, gone, error, recheck } = useBindState();
-  return createElement('div', null,
-    createElement(BindPanelBody, { state, gone, error, recheck }),
-    createElement(ConfigPanel, { bindPhase: state?.phase, selectorSource }),
-    createElement(QQDefaultsSettings, { store, selectorSource }),
-    createElement(QQAccountOwners, { store }),
+  // 单页两卡：账号与访问（凭据 / 服务范围 / 所有者，均"保存即重载插件"）与新对话默认值（版本化即时生效）。
+  return createElement('div', { className: 'imqb-cards' },
+    createElement('section', { className: 'imqb-card', 'aria-label': '账号与访问' },
+      createElement('h2', { className: 'imqb-cardTitle' }, '账号与访问'),
+      createElement('p', { className: 'imqb-cardHint' }, '机器人凭据、可对话的对象范围与管理员。此处的保存会重载插件，并中断正在运行的 QQ 任务。'),
+      createElement(BindPanelBody, { state, gone, error, recheck }),
+      createElement(ConfigPanel, { bindPhase: state?.phase, selectorSource, t }),
+      createElement(QQAccountOwners, { store })),
+    createElement('section', { className: 'imqb-card', 'aria-label': '新对话默认值' },
+      createElement(QQDefaultsSettings, { store, selectorSource, t })),
   );
 }
 
 /** 主面板页面：与设置栏目同一内容，包一层滚动留白容器（plugins.detail.actions 的跳转目标） */
-function QQBotPage({ selectorSource, store, initialSettings, installSettingsHandler }: {
-  selectorSource: SelectorSource; store: QQSessionStore;
+function QQBotPage({ selectorSource, store, t, initialSettings, installSettingsHandler }: {
+  selectorSource: SelectorSource; store: QQSessionStore; t: QQTranslate;
   initialSettings: () => boolean; installSettingsHandler: (handler: (() => void) | undefined) => void;
 }): ReactNode {
   const [settings, setSettings] = useState(initialSettings);
@@ -63,8 +69,8 @@ function QQBotPage({ selectorSource, store, initialSettings, installSettingsHand
     createElement('div', { className: 'imqb-pluginPageContent' },
       createElement(Button, { variant: 'outline', size: 'sm', onClick: () => setSettings(false) }, '‹ 返回 QQ 会话'),
       createElement('h1', { className: 'imqb-pageTitle' }, 'QQ 机器人'),
-      createElement('p', { className: 'imqb-pageDescription' }, '管理账号、访问范围与新对话默认值'),
-      createElement(QQBotSettingsSection, { selectorSource, store }))) : null,
+      createElement('p', { className: 'imqb-pageDescription' }, '管理机器人账号、可对话范围与新对话默认值'),
+      createElement(QQBotSettingsSection, { selectorSource, store, t }))) : null,
   );
 }
 
@@ -93,9 +99,13 @@ function OpenQqBotAction({ subject, packageName, onOpen }: {
 export function apply(ctx: Context): void {
   // 面板样式全局安装：插件详情按钮等面板外渲染的元素也需要可见
   installPanelStyles();
+  // QQ 可见文案命名空间（唯一来源）；已注册的 slot 文案随 locale 变化刷新
+  ctx.effect(() => registerQQLocale(ctx), 'qqbot-locale: dictionaries');
+  const t: QQTranslate = bindQQ(ctx);
   const selectorSource: SelectorSource = {
     permissionCatalog: () => ctx.remote.permissionPresets.catalog(),
     modelCatalog: () => ctx.remote.session.modelCatalog(),
+    pickDirectory: () => ctx.uiWorkspace.pickDirectory(),
     listAgentPresets: async () => {
       const result = await ctx.remote.agentPresets.list();
       if (!result.ok) return result;
@@ -110,16 +120,16 @@ export function apply(ctx: Context): void {
     },
   };
   const store = new QQSessionStore(ctx.uiWorkspace);
-  const SettingsSection = (): ReactNode => createElement(QQBotSettingsSection, { selectorSource, store });
+  const SettingsSection = (): ReactNode => createElement(QQBotSettingsSection, { selectorSource, store, t });
   let settingsRequested = false;
   let showSettings: (() => void) | undefined;
   const installSettingsHandler = (handler: (() => void) | undefined): void => { showSettings = handler; };
   const initialSettings = (): boolean => { const value = settingsRequested; settingsRequested = false; return value; };
-  const MainPage = (): ReactNode => createElement(QQBotPage, { selectorSource, store, initialSettings, installSettingsHandler });
+  const MainPage = (): ReactNode => createElement(QQBotPage, { selectorSource, store, t, initialSettings, installSettingsHandler });
   const slots = (ctx as unknown as { slots?: SlotsLike }).slots;
 
   const disposers: Array<() => void> = [];
-  installNativeQQConversation(ctx, store, selectorSource);
+  installNativeQQConversation(ctx, store, selectorSource, t);
 
   // 1. 设置页「QQ Bot」栏目（主展示位：注册即展示，无时序依赖）
   if (slots !== undefined) {
@@ -152,7 +162,7 @@ export function apply(ctx: Context): void {
         navigation: pageCtx.uiWorkspace,
         mountSidebar: () => pageSlots.inject('sidebar.workspaces', () => pageSlots.register(
           { name: 'sidebar.workspaces', priority: -1 },
-          (props) => createElement(QQSidebar, { ...props, store, actions, defaultWorkspaceName: ctx.locale.bind('common')('workspace.defaultName') }),
+          (props) => createElement(QQSidebar, { ...props, store, actions, t, defaultWorkspaceName: ctx.locale.bind('common')('workspace.defaultName') }),
         )),
       });
       const detailSlots = pageSlots as unknown as SlotsLike;

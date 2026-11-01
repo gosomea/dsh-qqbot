@@ -16,6 +16,8 @@ import { BIND_CONFIG_PATH } from '../shared/bind-protocol.ts';
 import { fetchJson } from './http.ts';
 import { configDraft, configPatch, DEFAULT_ACCESS, isConfigDirty, normalizeConfig, parseConfigDraft, rebaseConfig, type AccessControlWire, type ConfigDraft, type ConfigWire } from './config-form-state.ts';
 import type { SelectorSource } from './host-selectors.ts';
+import type { QQBotKey } from './qq-locale.ts';
+import type { Translate } from '@deepseek-ai/dsh-client-ui-slots';
 
 /** 样式注入标记（幂等） */
 const STYLE_ID = 'im-qqbot-config-panel-styles';
@@ -188,7 +190,7 @@ async function confirmSavedConfig(expected: PendingConfirmation, signal: AbortSi
   return undefined;
 }
 
-export interface ConfigPanelProps { bindPhase?: string; selectorSource?: SelectorSource }
+export interface ConfigPanelProps { bindPhase?: string; selectorSource?: SelectorSource; t?: Translate<QQBotKey> }
 
 /** Settings editor with recoverable requests and a draft protected from binding refreshes. */
 export function ConfigPanel({ bindPhase }: ConfigPanelProps): ReactNode {

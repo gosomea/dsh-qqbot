@@ -15,6 +15,7 @@ import { act, createElement as h } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QQConversationOverlay } from './conversation-panel.ts';
 import { QQSessionStore } from './qq-session-store.ts';
+import { testT } from './qq-locale.ts';
 
 let root;
 let container;
@@ -35,7 +36,7 @@ function admissionButton() {
   return button;
 }
 function overlay(store) {
-  return h(QQConversationOverlay, { store, selectorSource: { modelCatalog: async () => ({ ok: true, value: { groups: [], failures: [] } }), listAgentPresets: async () => ({ ok: true, value: { presets: [] } }) }, defaultWorkspaceName: '默认工作区', useWorkspaces: (select) => select({ items: [] }) });
+  return h(QQConversationOverlay, { store, t: testT, selectorSource: { modelCatalog: async () => ({ ok: true, value: { groups: [], failures: [] } }), listAgentPresets: async () => ({ ok: true, value: { presets: [] } }) }, defaultWorkspaceName: '默认工作区', useWorkspaces: (select) => select({ items: [] }) });
 }
 function previewStore(passiveReply) {
   const value = { ...entry(), admitted: true, currentSessionId: 'current-session', passiveReply };
@@ -55,7 +56,7 @@ describe('QQ drawer action feedback', () => {
     store.accept({ conversations: [value], tools: [], ownerIds: [] }); store.openDrawer(value);
     const notice = '准入规则已保存；等待连接重载后开始接收 QQ 消息。';
     const perform = vi.spyOn(store, 'perform').mockResolvedValueOnce({ notice }).mockResolvedValueOnce({});
-    await act(async () => root.render(h(QQConversationOverlay, { store, selectorSource: { modelCatalog: async () => ({ ok: true, value: { groups: [], failures: [] } }), listAgentPresets: async () => ({ ok: true, value: { presets: [] } }) }, defaultWorkspaceName: '默认工作区', useWorkspaces: (select) => select({ items: [] }) })));
+    await act(async () => root.render(h(QQConversationOverlay, { store, t: testT, selectorSource: { modelCatalog: async () => ({ ok: true, value: { groups: [], failures: [] } }), listAgentPresets: async () => ({ ok: true, value: { presets: [] } }) }, defaultWorkspaceName: '默认工作区', useWorkspaces: (select) => select({ items: [] }) })));
     await act(async () => admissionButton().click());
     expect(perform).toHaveBeenCalledWith({ action: 'admit', key: value.key, enabled: true });
     expect(Array.from(document.querySelectorAll('[role="status"]')).some((element) => element.textContent === notice)).toBe(true);

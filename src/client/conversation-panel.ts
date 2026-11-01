@@ -76,7 +76,7 @@ function usePassiveReplyFeedback(passiveReply: ConversationView['passiveReply'])
   }, [expiresAt]);
   return passiveReplyFeedback(passiveReply, now);
 }
-export function QQConversationOverlay({ store, selectorSource, useWorkspaces, useSessions, defaultWorkspaceName }: { store: QQSessionStore; selectorSource: SelectorSource; defaultWorkspaceName: string; useWorkspaces: PropsRuntime<'shell.overlay'>['useWorkspaces']; useSessions?: PropsRuntime<'shell.overlay'>['useSessions'] }): ReactNode {
+export function QQConversationOverlay({ store, selectorSource, t, useWorkspaces, useSessions, defaultWorkspaceName }: { store: QQSessionStore; selectorSource: SelectorSource; t: import('./qq-locale.ts').QQTranslate; defaultWorkspaceName: string; useWorkspaces: PropsRuntime<'shell.overlay'>['useWorkspaces']; useSessions?: PropsRuntime<'shell.overlay'>['useSessions'] }): ReactNode {
   const state = useQQSessionStore(store);
   const workspaces = useWorkspaces((snapshot) => snapshot.items);
   const overlay = state.overlay;
@@ -84,7 +84,7 @@ export function QQConversationOverlay({ store, selectorSource, useWorkspaces, us
     const target = overlay.target;
     const entry = store.conversation(target.key);
     return h(Modal, { key: `${target.key}/${target.sessionId}`, title: `${target.name} · QQ 设置`, open: true, closeLabel: '关闭', className: 'imqq-settingsModal', onClose: store.closeDrawer,
-      children: entry ? h(QQConversationView, { sessionId: target.sessionId, conversationKey: target.key, initialTab: target.tab, store, selectorSource, useSessions, useWorkspaces, defaultWorkspaceName }) : h('p', { role: 'alert' }, '此 QQ 对话已不可用，请刷新目录。') });
+      children: entry ? h(QQConversationView, { sessionId: target.sessionId, conversationKey: target.key, initialTab: target.tab, store, selectorSource, t, useSessions, useWorkspaces, defaultWorkspaceName }) : h('p', { role: 'alert' }, '此 QQ 对话已不可用，请刷新目录。') });
   }
   if (overlay?.kind === 'operation') return h(QQOperationDialog, { key: `${overlay.target.kind}/${overlay.target.key}`, target: overlay.target, store, selectorSource, workspaces, defaultWorkspaceName });
   if (overlay?.kind === 'answer') return h(Modal, { key: overlay.preview.operationId, title: `发送到 ${overlay.preview.name}`, open: true, closeLabel: '关闭', className: 'imqq-answerPreview', onClose: store.closePreview, children: h(AnswerPreview, { preview: overlay.preview, store }) });

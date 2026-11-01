@@ -8,6 +8,7 @@
  *   - qqbot：插件自身特有（ping/version/status/help）
  */
 import type { CommandDeps, CategorizedCommand } from './types.ts';
+import type { SlashCommandDescriptor } from '../shared/conversation-protocol.ts';
 import { newCommand, compactCommand } from './session.ts';
 import { modelCommand } from './model.ts';
 import { presetCommand } from './preset.ts';
@@ -37,6 +38,7 @@ export function buildCommandList(deps: CommandDeps): CategorizedCommand[] {
   commands.push(helpCommand(deps, () => commands));
 
   if (deps.manager.conversations) {
+    // permission 命令仅在可访问 conversations 服务时注册（与下方闭包条件一致）。
     commands.push({ name: 'permission', category: 'agent', scope: 'all', description: '查看此对话权限或切换已授权的权限模式',
       handler: async (ctx) => {
         const { scope, peerId } = getScopePeer(ctx);
@@ -73,4 +75,24 @@ export function buildCommandList(deps: CommandDeps): CategorizedCommand[] {
   }
 
   return commands;
+}
+
+/**
+ * 把命令注册表投影为 UI 用的元数据（去 handler）。
+ *
+ * 与 buildCommandList 共用同一份清单，避免 UI 维护第二套命令定义：
+ * 名称/别名/描述/分类均来自注册表本身；handler 依赖运行时 manager，不对外暴露。
+ */
+export function describeCommands(deps: CommandDeps): SlashCommandDescriptor[] {
+  return buildCommandList(deps).map((command): SlashCommandDescriptor => {
+    const names = Array.isArray(command.name) ? command.name : [command.name];
+    return {
+      name: names[0] ?? '',
+      aliases: names.slice(1),
+      description: command.description ?? '',
+      category: command.category,
+      scope: typeof command.scope === 'string' ? command.scope : 'all',
+      ...(command.hidden === true ? { hidden: true } : {}),
+    };
+  }).filter((descriptor) => descriptor.name !== '');
 }

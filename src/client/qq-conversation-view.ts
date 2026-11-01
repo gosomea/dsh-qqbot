@@ -6,6 +6,7 @@ import type { ConversationView, TimelineEntry, TimelinePage } from '../shared/co
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types';
 import type {} from '@deepseek-ai/dsh-permission-presets/types';
 import type { SelectorSource } from './host-selectors.ts';
+import type { QQTranslate } from './qq-locale.ts';
 import { QQSessionStore, useQQSessionStore, type QQDrawerTab } from './qq-session-store.ts';
 import { QQPeerSettings } from './qq-peer-settings.ts';
 import { conversationName } from './conversation-state.ts';
@@ -18,8 +19,8 @@ const tabs: [SegmentedTab<ViewTab>, ...SegmentedTab<ViewTab>[]] = [
   { value: 'settings', label: '会话设置', id: 'qq-settings-tab', panelId: 'qq-settings-panel' },
   { value: 'messages', label: '消息记录', id: 'qq-messages-tab', panelId: 'qq-messages-panel' },
 ];
-export function QQConversationView({ sessionId, store, selectorSource, useSessions, useProjection, conversationKey, initialTab }: {
-  sessionId: string | null; store: QQSessionStore; selectorSource: SelectorSource; conversationKey?: string; initialTab?: QQDrawerTab;
+export function QQConversationView({ sessionId, store, selectorSource, t, useSessions, useProjection, conversationKey, initialTab }: {
+  sessionId: string | null; store: QQSessionStore; selectorSource: SelectorSource; t: QQTranslate; conversationKey?: string; initialTab?: QQDrawerTab;
   useSessions?: PropsRuntime<'conversation.view'>['useSessions']; useWorkspaces?: PropsRuntime<'conversation.view'>['useWorkspaces']; useProjection?: PropsRuntime<'conversation.view'>['useProjection']; defaultWorkspaceName?: string;
 }): ReactNode {
   const state = useQQSessionStore(store);
@@ -58,7 +59,7 @@ export function QQConversationView({ sessionId, store, selectorSource, useSessio
       .catch((cause: unknown) => { if (activeKey.current === key) setError(cause instanceof Error ? cause.message : '取消归档失败'); })
       .finally(() => { if (activeKey.current === key) setBusy(false); });
   };
-  return h('section', { ref: rootRef, className: 'imqc imqc-settingsView', 'aria-label': 'QQ 机器人会话设置' },
+  return h('section', { ref: rootRef, className: 'imqc imqc-settingsView', 'aria-label': t('view.settings.title') },
     h('header', { className: 'imqc-viewHeading' }, h('h3', null, conversationName(entry)), h('span', { className: 'imqc-hint' }, entry.scope === 'group' ? 'QQ 群聊' : 'QQ 私聊')),
     h(SegmentedTabs<ViewTab>, { className: 'imqc-tabs', label: 'QQ 会话设置类别', value: tab, items: tabs, size: 'sm', onChange: setTab }),
     error ? h('p', { className: 'imqc-error', role: 'alert' }, error) : null,
@@ -73,7 +74,7 @@ export function QQConversationView({ sessionId, store, selectorSource, useSessio
           entry.archived ? h('div', { className: 'imqc-banner', role: 'status' }, h('strong', null, '当前 QQ 会话已归档'), h('p', null, '取消归档后继续接收，或新建会话。'),
             h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => setUnarchive(true) }, '取消归档继续…'),
             unarchive ? h('div', { className: 'imqc-actions' }, h('p', null, '确认取消归档并让 QQ 消息继续进入此会话？'), h(Button, { variant: 'primary', size: 'sm', disabled: busy, onClick: restore }, '确认取消归档'), h(Button, { variant: 'ghost', size: 'sm', disabled: busy, onClick: () => setUnarchive(false) }, '取消')) : null) : null,
-          h(QQPeerSettings, { key: entry.key, entry, store, tools: state.directory?.tools ?? [], selectorSource })) : null,
+          h(QQPeerSettings, { key: entry.key, entry, store, tools: state.directory?.tools ?? [], commands: state.directory?.commands ?? [], selectorSource, t })) : null,
       tab === 'messages' ? h(QQMessageTimeline, { key: entry.key, entry, store }) : null));
 }
 export function QQMessageTimeline({ entry, store }: { entry: ConversationView; store: QQSessionStore }): ReactNode {

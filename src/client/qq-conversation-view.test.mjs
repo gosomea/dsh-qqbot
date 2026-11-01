@@ -12,6 +12,7 @@ import { act, createElement as h } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QQConversationView, QQMessageTimeline } from './qq-conversation-view.ts';
 import { QQSessionStore } from './qq-session-store.ts';
+import { testT } from './qq-locale.ts';
 import { defaultPolicy } from '../policy/validation.ts';
 let root, container, sequence = 0;
 beforeEach(() => { container = document.createElement('div'); document.body.append(container); root = createRoot(container); });
@@ -32,7 +33,7 @@ function setup(entry) {
 function button(label) { const value = [...document.querySelectorAll('button')].find(item => item.textContent === label); if (!value) throw new Error(`Missing ${label}`); return value; }
 async function click(label) { await act(async () => button(label).click()); }
 const selectors = { modelCatalog: async () => ({ ok: true, value: { groups: [], failures: [] } }), listAgentPresets: async () => ({ ok: true, value: { presets: [] } }), permissionCatalog: async () => ({ ok: true, value: { options: [{ value: 'read-only', name: '只读' }, { value: 'workspace-write', name: '工作区可写' }] } }) };
-function view(store, sessionId = 'current') { return h(QQConversationView, { store, sessionId, selectorSource: selectors,
+function view(store, sessionId = 'current') { return h(QQConversationView, { store, sessionId, t: testT, selectorSource: selectors,
   useSessions: select => select({ byId: { current: { title: '当前任务', cwd: '/project', updatedAt: 2, projectionValues: { agentPreset: 'standard', permissions: { currentValue: 'workspace-write' } } }, old: { title: '旧任务', cwd: '/archive', updatedAt: 1 } } }),
   useWorkspaces: select => select({ items: [{ workspaceId: 'workspace', title: '项目', path: '/project', sessionIds: ['current'] }, { workspaceId: 'old-space', title: '归档资料', path: '/archive', sessionIds: ['old'] }] }) }); }
 describe('QQ settings and message pages', () => {
@@ -41,14 +42,16 @@ describe('QQ settings and message pages', () => {
     await act(async () => root.render(view(store)));
     expect([...document.querySelectorAll('[role="tab"]')].map(item => item.textContent)).toEqual(['会话设置', '消息记录']);
     expect(container.querySelector('.imqc-peerSettings')).not.toBeNull();
-    expect(container.querySelector('details')).toBeNull();
+    // 斜杠命令清单是唯一新增的可折叠区（来自命令注册表）
+    expect(container.querySelectorAll('details').length).toBe(1);
+    expect(container.querySelector('details.imqc-cmdList')).not.toBeNull();
     expect(container.querySelector('input[aria-label="保留消息记录条数"]').value).toBe('1000');
     expect(container.textContent).not.toContain('自动换新');
     expect(perform).not.toHaveBeenCalled();
   });
   it('shows only the historical native selections and no current policy form', async () => {
     const entry = fixture(); const { store, perform } = setup(entry); const open = vi.spyOn(store, 'openSession');
-    await act(async () => root.render(h(QQConversationView, { store, sessionId: 'old', selectorSource: selectors,
+    await act(async () => root.render(h(QQConversationView, { store, sessionId: 'old', t: testT, selectorSource: selectors,
       useProjection: key => key === 'permissions' ? { currentValue: 'workspace-write' } : 'historical-agent' })));
     expect(container.textContent).toContain('这是历史会话，设置只读');
     expect(container.textContent).toContain('此会话 Agent 预设：historical-agent；权限：workspace-write');

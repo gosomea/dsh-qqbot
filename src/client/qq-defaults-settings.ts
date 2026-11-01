@@ -9,17 +9,17 @@ import { QQSessionStore, useQQSessionStore } from './qq-session-store.ts';
 interface DefaultsDraft { draft: QQDefaults; base: QQDefaults }
 const drafts = new WeakMap<QQSessionStore, DefaultsDraft>();
 
-export function QQDefaultsSettings({ store, selectorSource }: { store: QQSessionStore; selectorSource: SelectorSource }): ReactNode {
+export function QQDefaultsSettings({ store, selectorSource, t }: { store: QQSessionStore; selectorSource: SelectorSource; t?: import('./qq-locale.ts').QQTranslate }): ReactNode {
   const state = useQQSessionStore(store);
   const defaults = state.directory?.defaults;
   if (!defaults) return h('section', { className: 'imqc', 'aria-label': '新对话默认设置' }, h('h3', null, '新对话默认设置'),
     h('p', { role: state.error ? 'alert' : 'status', className: state.error ? 'imqc-error' : 'imqc-hint' }, state.error ?? '正在读取新对话默认设置…'),
     h(Button, { variant: 'ghost', size: 'sm', disabled: state.loading, onClick: store.refresh }, '刷新默认设置'));
-  return h(DefaultsSettingsDraft, { store, selectorSource, defaults, tools: state.directory?.tools ?? [] });
+  return h(DefaultsSettingsDraft, { store, selectorSource, defaults, t, tools: state.directory?.tools ?? [], commands: state.directory?.commands ?? [] });
 }
 
-function DefaultsSettingsDraft({ store, selectorSource, defaults, tools }: {
-  store: QQSessionStore; selectorSource: SelectorSource; defaults: QQDefaults; tools: Parameters<typeof QQAgentSettingsForm>[0]['tools'];
+function DefaultsSettingsDraft({ store, selectorSource, defaults, t, tools, commands }: {
+  store: QQSessionStore; selectorSource: SelectorSource; defaults: QQDefaults; t?: import('./qq-locale.ts').QQTranslate; tools: Parameters<typeof QQAgentSettingsForm>[0]['tools']; commands: Parameters<typeof QQAgentSettingsForm>[0]['commands'];
 }): ReactNode {
   const [retained, setRetained] = useState<DefaultsDraft>(() => drafts.get(store) ?? { draft: structuredClone(defaults), base: structuredClone(defaults) });
   const { draft, base } = retained;
@@ -46,13 +46,14 @@ function DefaultsSettingsDraft({ store, selectorSource, defaults, tools }: {
     }).catch((cause: unknown) => { if (mounted.current) setError(cause instanceof Error ? cause.message : '默认设置保存失败，草稿已保留。'); })
       .finally(() => { pending.current = false; if (mounted.current) setBusy(false); });
   };
-  return h('section', { className: 'imqc imqc-defaultsSettings', 'aria-label': '新对话默认设置', 'aria-busy': busy },
-    h('h3', null, '新对话默认设置'),
-    h('p', { className: 'imqc-hint' }, '之后首次接入的群聊和私聊复制这些设置。保存立即生效，不会重载插件，也不会更改已有对话。'),
-    h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, disabled: busy, onRefreshCatalog: catalog.refresh, onChange: settings => { setRetained(value => ({ ...value, draft: { ...value.draft, settings } })); setError(''); setNotice(''); } }),
+  const ttl = t ? t('defaults.title') : '新对话默认值';
+  return h('section', { className: 'imqc imqc-defaultsSettings', 'aria-label': ttl, 'aria-busy': busy },
+    h('h3', { className: 'imqb-cardTitle' }, ttl),
+    h('p', { className: 'imqb-cardHint' }, t ? t('defaults.hint') : '之后首次接入的群聊和私聊复制这些设置。保存立即生效，不改动已接入的对话，也不会重载插件。'),
+    h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, commands, onPickDirectory: selectorSource.pickDirectory, disabled: busy, onRefreshCatalog: catalog.refresh, onChange: settings => { setRetained(value => ({ ...value, draft: { ...value.draft, settings } })); setError(''); setNotice(''); } }),
     conflict && dirty ? h('p', { role: 'alert', className: 'imqc-error' }, '默认设置已在其他位置更新。草稿保留，请放弃修改以载入最新设置。') : null,
     error ? h('p', { role: 'alert', className: 'imqc-error' }, error) : null,
     notice ? h('p', { role: 'status', className: 'imqc-hint' }, notice) : null,
     h('div', { className: 'imqc-actions' }, h(Button, { variant: 'ghost', size: 'sm', disabled: busy || !dirty, onClick: discard }, '放弃默认设置修改'),
-      h(Button, { variant: 'primary', size: 'sm', disabled: busy || !dirty || conflict, onClick: save }, busy ? '保存中…' : '保存默认设置')));
+      h(Button, { variant: 'primary', size: 'sm', disabled: busy || !dirty || conflict, onClick: save }, busy ? '保存中…' : (t ? t('defaults.save') : '保存默认设置（即时生效）'))));
 }

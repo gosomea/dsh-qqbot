@@ -38,6 +38,16 @@ export function installConversationStyles(): void {
 .imqc-check { display: flex; align-items: flex-start; gap: 7px; margin: 7px 0; overflow-wrap: anywhere; }
 .imqc-toolChoices { max-height: 260px; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; }
 .imqc-toolGroup { padding: 13px 0; border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.imqc-fieldset { margin: 12px 0; padding: 10px 14px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); }
+.imqc-fieldsetTitle { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 2px 0 6px; }
+.imqc-fieldset > .imqc-hint { margin-bottom: 8px; }
+.imqc-fieldset .imqc-field { margin: 8px 0; }
+.imqc-cmdList { margin: 6px 0 2px; }
+.imqc-cmdList > summary { cursor: pointer; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.imqc-cmdGroup { margin: 8px 0 4px; }
+.imqc-cmdGroup > strong { display: block; font-size: 12px; color: var(--dsw-alias-label-secondary); margin-bottom: 4px; }
+.imqc-cmdRow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 2px 0; }
+.imqc-cmdRow code { font-size: 12px; color: var(--dsw-alias-label-primary); }
 .imqc-tool { display: grid; grid-template-columns: minmax(0,1fr) 90px; gap: 10px; align-items: start; padding-top: 12px; }
 .imqc-toolCheckbox > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .imqc-tool small { margin-top: 2px; }
@@ -101,6 +111,8 @@ export function installConversationStyles(): void {
 .imqq-sessionRow[data-current=true] .imqq-sessionTitle { color: var(--dsw-alias-label-primary); font-weight: 500; }
 .imqq-sessionCurrent { flex: none; font-size: 9px; line-height: 1.3; padding: 0 5px; border-radius: 999px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
 .imqq-sidebar .imqq-menuTrigger { padding-inline: 4px; min-width: 24px; width: 24px; height: 24px; color: var(--dsw-alias-label-secondary); letter-spacing: 1px; }
+.imqq-sidebar .imqq-quickAdd { flex: none; padding-inline: 4px; min-width: 24px; width: 24px; height: 24px; color: var(--dsw-alias-label-secondary); }
+.imqq-sidebar .imqq-quickAdd:disabled { opacity: .35; cursor: default; }
 .imqq-sessions { margin-left: 40px; padding-left: 8px; }
 .imqq-sessionRow { display: flex; align-items: center; min-width: 0; border-radius: var(--dsw-radius-md); padding-right: 2px; margin: 2px 0; }
 .imqq-sessionRow[data-selected=true] { background: var(--dsw-alias-bg-layer-2); }

@@ -10,6 +10,7 @@ import { presetCommand } from './preset.ts';
 import { newCommand } from './session.ts';
 import { statusCommand } from './status.ts';
 import type { CommandDeps } from './types.ts';
+import { buildCommandList, describeCommands } from './index.ts';
 
 vi.mock('../shared/index.ts', async (original) => ({
   ...await original<typeof import('../shared/index.ts')>(),
@@ -134,4 +135,22 @@ describe('mobile commands explain the same defaults as Web', () => {
     expect(reply).toContain('新会话将采用此预设'); expect(reply).not.toContain('已开始新会话');
   });
 
+  it('projects the command registry to UI metadata without handlers (single source of truth)', () => {
+    const { deps } = dependencies();
+    const descriptors = describeCommands(deps);
+    // 与注册表同一份清单
+    expect(descriptors.length).toBe(buildCommandList(deps).length);
+    // 只含 UI 需要的字段，不含 handler
+    for (const descriptor of descriptors) {
+      expect(descriptor).not.toHaveProperty('handler');
+      expect(typeof descriptor.name).toBe('string');
+      expect(descriptor.name.startsWith('/')).toBe(false);
+      expect(['agent', 'qqbot']).toContain(descriptor.category);
+    }
+    // 别名展开：new 命令注册为数组时首个为 name、其余进 aliases
+    const names = descriptors.map((descriptor) => descriptor.name);
+    expect(names).toContain('new');
+    expect(names).toContain('model');
+    expect(names).toContain('bot-help');
+  });
 });

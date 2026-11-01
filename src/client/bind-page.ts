@@ -99,7 +99,12 @@ export function installPanelStyles(): void {
 .imqb-scanned-title { margin: 0; font-size: 15px; font-weight: 600; }
 .imqb-scanned-sub { margin: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); line-height: 1.6; }
     `;
-  style.textContent += '\n.imqb-danger { color: var(--dsw-alias-state-error-primary); }\n.imqb-field > span { width: 100%; }';
+  style.textContent += `\n.imqb-danger { color: var(--dsw-alias-state-error-primary); }
+.imqb-field > span { width: 100%; }
+.imqb-cards { display: flex; flex-direction: column; gap: 20px; }
+.imqb-card { border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); padding: 4px 16px 16px; background: var(--dsw-alias-bg-layer-1); }
+.imqb-cardTitle { margin: 14px 0 4px; font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.imqb-cardHint { margin: 0 0 8px; font-size: 12px; line-height: 1.6; color: var(--dsw-alias-label-tertiary); }`;
   document.head.appendChild(style);
 }
 

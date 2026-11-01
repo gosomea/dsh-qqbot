@@ -1,7 +1,7 @@
 import { createElement as h, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Button, Checkbox, Input, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { QQAgentSettings, QQExecutionSettings } from '../shared/agent-settings.ts';
-import type { ConversationSandboxMode, ToolCatalogEntry } from '../shared/conversation-protocol.ts';
+import type { ConversationSandboxMode, SlashCommandDescriptor, ToolCatalogEntry } from '../shared/conversation-protocol.ts';
 import { defaultModelLabel, defaultPresetLabel, findModel, modelChoiceId, modelLabel, presetLabel } from './host-selectors.ts';
 import type { QQAgentCatalog } from './qq-agent-catalog.ts';
 import { QQSelect, type QQSelectOption } from './qq-controls.ts';
@@ -21,10 +21,14 @@ export interface QQAgentSettingsFormProps {
   readonly askTools?: readonly string[];
   readonly onChange: (settings: QQAgentSettings) => void;
   readonly onRefreshCatalog: () => void;
+  /** Slash-command metadata from the registry (single source of truth); omitted hides the list. */
+  readonly commands?: readonly SlashCommandDescriptor[];
+  /** Open the Host directory picker to fill the working directory; omitted hides the browse button. */
+  readonly onPickDirectory?: () => Promise<string | null>;
 }
 
 /** Draft fields only. The parent owns persistence, versions and conflict handling. */
-export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
+export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
   const [query, setQuery] = useState('');
   const [toolsOpen, setToolsOpen] = useState(false);
   const execution = settings.execution;
@@ -54,9 +58,10 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
       const permission = PERMISSIONS.find(item => item.value === value)?.value;
       if (permission) setExecution({ kind: 'native', permission });
     } })),
-    execution.kind === 'native' ? h('p', { className: 'imqc-hint' }, '使用所选 Agent 的实际工具，并遵循 DSH 原生权限。') : h('section', { className: 'imqc-customTools', 'aria-label': '自定义工具' },
-      h('div', { className: 'imqc-field' }, h('span', null, '自定义工具的基础权限'), h(QQSelect, { label: '自定义工具的基础权限', value: execution.permission, options: PERMISSIONS, disabled, onChange: value => { const permission = PERMISSIONS.find(item => item.value === value)?.value; if (permission) setExecution({ ...execution, permission }); } })),
-      h('p', { className: 'imqc-hint' }, '仅开放勾选的工具。基础权限仍限制文件、命令和网络操作；已有额外审批规则保留。'),
+    execution.kind === 'native' ? h('p', { className: 'imqc-hint' }, '使用所选 Agent 的实际工具，并遵循 DSH 原生权限。') : h('section', { className: 'imqc-fieldset imqc-customTools', 'aria-label': '自定义工具集' },
+      h('div', { className: 'imqc-fieldsetTitle' }, '自定义工具集'),
+      h('p', { className: 'imqc-hint' }, '仅开放下方勾选的工具；基础权限是这些工具之上的上限，文件、命令和网络操作仍受其限制，已有额外审批规则保留。'),
+      h('div', { className: 'imqc-field' }, h('span', null, '基础上限'), h(QQSelect, { label: '自定义工具的基础权限', value: execution.permission, options: PERMISSIONS, disabled, onChange: value => { const permission = PERMISSIONS.find(item => item.value === value)?.value; if (permission) setExecution({ ...execution, permission }); } })),
       h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => setToolsOpen(true) }, `选择工具（已选 ${selected.size} 项）`),
       toolsOpen ? h(Modal, { open: true, title: '选择可用工具', closeLabel: '关闭工具选择', onClose: () => setToolsOpen(false), children: h('div', { className: 'imqc' },
       h(Input, { type: 'search', value: query, disabled, placeholder: '搜索工具名称或标识', 'aria-label': '搜索工具', onChange: (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value) }),
@@ -64,10 +69,24 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
       h('div', { className: 'imqc-toolChoices' }, ...Object.entries(CATEGORIES).map(([category, label]) => ({ category, label, tools: visible.filter(tool => tool.category === category) })).filter(group => group.tools.length).map(group => h('section', { key: group.category, className: 'imqc-toolGroup' }, h('strong', null, group.label), ...group.tools.map(tool => h('div', { className: 'imqc-tool', key: tool.id }, h('div', { title: tool.description }, h('span', null, tool.name), tool.id !== tool.name ? h('small', { className: 'imqc-hint' }, tool.id) : null, !tool.available ? h('small', { className: 'imqc-hint' }, tool.reason ?? '当前不可用') : null, askTools.includes(tool.id) ? h('small', { className: 'imqc-hint' }, '需额外审批') : null), h(Checkbox, { className: 'imqc-toolCheckbox', label: `启用${tool.name}`, checked: selected.has(tool.id), disabled: disabled || (!tool.available && !selected.has(tool.id)), onChange: checked => setTools(checked ? [...selected, tool.id] : [...selected].filter(id => id !== tool.id)) })))))),
       visible.length === 0 ? h('p', { className: 'imqc-hint' }, '没有匹配的工具。') : null,
       h(Button, { variant: 'primary', size: 'sm', onClick: () => setToolsOpen(false) }, '完成选择')) }) : null),
-    h('label', { className: 'imqc-field' }, h('span', null, '工作目录'), h(Input, { value: settings.cwd, disabled, placeholder: '留空使用 QQ 默认工作目录', 'aria-label': '工作目录', onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, cwd: event.target.value }) })),
+    h('div', { className: 'imqc-field' }, h('span', null, '工作目录'),
+      h('div', { className: 'imqc-inline' }, h(Input, { value: settings.cwd, disabled, placeholder: '留空使用 QQ 默认工作目录', 'aria-label': '工作目录', onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, cwd: event.target.value }) }),
+        onPickDirectory ? h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => { void onPickDirectory().then(path => { if (path) onChange({ ...settings, cwd: path }); }); } }, '选择目录…') : null)),
     h('label', { className: 'imqc-field' }, h('span', null, '补充提示词'), h('textarea', { rows: 4, value: settings.prompt, disabled, maxLength: 20_000, 'aria-label': '补充提示词', onChange: (event: ChangeEvent<HTMLTextAreaElement>) => onChange({ ...settings, prompt: event.target.value }) })),
-    h('div', { className: 'imqc-inline' }, h('span', null, '允许 QQ Slash 命令'), h(Switch, { label: '允许 QQ Slash 命令', checked: settings.slashCommands, disabled, onChange: slashCommands => onChange({ ...settings, slashCommands }) })),
+    h('div', { className: 'imqc-inline' }, h('span', null, '斜杠命令'), h(Switch, { label: '斜杠命令', checked: settings.slashCommands, disabled, onChange: slashCommands => onChange({ ...settings, slashCommands }) })),
     h('p', { className: 'imqc-hint' }, '关闭后，普通用户的 / 命令返回停用提示；机器人所有者仍可使用命令。'),
+    h('details', { className: 'imqc-cmdList' }, h('summary', null, `查看支持的斜杠命令（${commands.length} 个）`),
+      commands.length === 0 ? h('p', { className: 'imqc-hint' }, '暂无可用命令。') : null,
+      ...(['agent', 'qqbot'] as const).map((category) => {
+        const items = commands.filter((command) => command.category === category && command.hidden !== true);
+        if (items.length === 0) return null;
+        return h('div', { className: 'imqc-cmdGroup', key: category },
+          h('strong', null, category === 'agent' ? '通用能力' : 'QQ 内置'),
+          ...items.map((command) => h('div', { className: 'imqc-cmdRow', key: command.name },
+            h('code', null, `/${command.name}`),
+            command.aliases.length ? h('span', { className: 'imqc-hint' }, `（别名 /${command.aliases.join('、/')}）`) : null,
+            h('span', { className: 'imqc-hint' }, command.description))));
+      })),
     catalog.loading ? h('p', { role: 'status', className: 'imqc-hint' }, '正在读取宿主模型和 Agent 预设目录…') : null,
     [...catalog.errors, ...(catalog.models?.failures ?? [])].map((error, index) => h('p', { key: index, role: 'alert', className: 'imqc-error' }, error)),
     catalog.errors.length ? h(Button, { variant: 'ghost', size: 'sm', disabled: disabled || catalog.loading, onClick: onRefreshCatalog }, '重试读取宿主目录') : null);

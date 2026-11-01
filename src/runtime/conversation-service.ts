@@ -14,7 +14,8 @@ import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy';
 import { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval';
 import { ConversationStore } from '../conversations/index.ts';
 import { defaultPolicy, validatePolicy, validatePolicyTools, catalogTools, installPolicy, toolCatalogEntry } from '../policy/index.ts';
-import type { ConversationEntry, ConversationPolicy, ConversationSnapshot, ToolCatalogEntry, DeliveryRecord, GroupMessageRecord } from '../shared/conversation-protocol.ts';
+import type { ConversationEntry, ConversationPolicy, ConversationSnapshot, SlashCommandDescriptor, ToolCatalogEntry, DeliveryRecord, GroupMessageRecord } from '../shared/conversation-protocol.ts';
+import { describeCommands } from '../commands/index.ts';
 import { PLUGIN_HOME, resolveAgentCwd } from '../shared/dirs.ts';
 import { getProfileDir } from '../shared/index.ts';
 import { updateProfileConfig } from '../setup/persist.ts';
@@ -243,12 +244,18 @@ export class ConversationService {
       if (runtime && typeof runtime === 'object' && 'sandboxMode' in runtime && runtime.sandboxMode !== undefined) this.catalogs.set('run_code', toolCatalogEntry({ name: 'run_code', description: '受本群权限约束的代码执行；需单独授权并使用实际沙箱。' }));
     } catch { /* Optional service availability is reflected by an empty catalog. */ }
   }
+  private commandsCache: SlashCommandDescriptor[] | null = null;
+  /** Slash-command metadata for the UI, derived once from the command registry. */
+  private commandDescriptors(): SlashCommandDescriptor[] {
+    if (this.commandsCache === null) this.commandsCache = describeCommands({ manager: this.manager, config: this.config, logger: this.logger });
+    return this.commandsCache;
+  }
   snapshot(): ConversationSnapshot {
     for (const entry of this.store.list()) {
       const record = this.manager.getSessionRecord(entry.scope, entry.peerId);
       if (record) this.refreshCatalog(record.agent);
     }
-    return { ownerIds: this.store.ownerIds(), defaults: this.store.defaults(), errors: [...this.store.errors(), ...this.operationRetention.errors()], tools: [...this.catalogs.values()], conversations: this.store.list().map(entry => {
+    return { ownerIds: this.store.ownerIds(), defaults: this.store.defaults(), errors: [...this.store.errors(), ...this.operationRetention.errors()], tools: [...this.catalogs.values()], commands: this.commandDescriptors(), conversations: this.store.list().map(entry => {
       const status = this.manager.getStatus(entry.scope, entry.peerId);
       const record = this.manager.getSessionRecord(entry.scope, entry.peerId);
       const workspace = entry.workspaceId ? this.ctx.get('workspaceRegistry')?.get(WorkspaceId(entry.workspaceId)) : undefined;

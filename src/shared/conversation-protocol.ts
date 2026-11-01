@@ -88,7 +88,9 @@ export type TimelineEntry =
   | { direction: 'outbound'; order: number; change: number; delivery: DeliveryRecord };
 export interface TimelineQuery { before?: number; snapshot?: number; after?: number; query?: string; limit?: number }
 export interface TimelinePage { items: TimelineEntry[]; snapshot: number; hasMore: boolean; nextBefore?: number; nextAfter?: number }
-export interface ConversationSnapshot { conversations: ConversationView[]; tools: ToolCatalogEntry[]; ownerIds: string[]; defaults?: QQDefaults; errors?: string[] }
+/** UI-facing slash-command metadata derived from the command registry (no handlers). */
+export interface SlashCommandDescriptor { name: string; aliases: string[]; description: string; category: 'agent' | 'qqbot'; scope: string; hidden?: boolean }
+export interface ConversationSnapshot { conversations: ConversationView[]; tools: ToolCatalogEntry[]; ownerIds: string[]; defaults?: QQDefaults; commands?: SlashCommandDescriptor[]; errors?: string[] }
 export type ConversationAction =
   | { action: 'defaults'; expectedVersion: number; settings: QQAgentSettings }
   | { action: 'settings'; key: string; expectedVersion: number; settings: QQAgentSettings; alias: string; receiveEnabled: boolean; recording?: { expectedVersion: number; maxMessages: number } }

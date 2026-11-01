@@ -5,10 +5,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client';
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
 import { Button, Input, Menu, Modal, IconChevronDownOutlineRegular, IconChevronRightOutlineRegular,
   IconChevronLeftOutlineRegular, IconSettingsOutlineRegular, IconSearchOutlineRegular, IconUsersOutlineRegular,
-  IconUserOutlineRegular, IconRefreshOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
+  IconUserOutlineRegular, IconRefreshOutlineRegular, IconPlusOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { ConversationView } from '../shared/conversation-protocol.ts';
 import { QQSessionStore, useQQSessionStore, type QQNavigationIntent } from './qq-session-store.ts';
 import { qqScopeCollapsed, qqSidebarPeers, visibleQQSessions, type QQSidebarPeer, type QQSidebarSession } from './qq-sidebar-model.ts';
+import type { QQTranslate } from './qq-locale.ts';
 import { QQNativeCatalogRehydrator, type QQNativeCatalogSource } from './qq-native-catalog.ts';
 
 type SidebarDialog = { readonly kind: 'rename'; readonly sessionId: string; readonly title: string };
@@ -19,8 +20,8 @@ export interface QQSidebarActions {
   readonly nativeCatalog: QQNativeCatalogSource;
 }
 
-export function QQSidebar({ store, actions, defaultWorkspaceName, wide, expandSidebar, useSessions, useWorkspaces }: PropsRuntime<'sidebar.workspaces'> & {
-  store: QQSessionStore; actions: QQSidebarActions; defaultWorkspaceName: string;
+export function QQSidebar({ store, actions, t, defaultWorkspaceName, wide, expandSidebar, useSessions, useWorkspaces }: PropsRuntime<'sidebar.workspaces'> & {
+  store: QQSessionStore; actions: QQSidebarActions; t: QQTranslate; defaultWorkspaceName: string;
 }): ReactNode {
   const state = useQQSessionStore(store);
   const native = useSessions((snapshot) => snapshot);
@@ -48,7 +49,7 @@ export function QQSidebar({ store, actions, defaultWorkspaceName, wide, expandSi
       return h('section', { key: scope, className: 'imqq-scope', 'aria-label': title },
         h('button', { type: 'button', className: 'imqq-scopeToggle', 'aria-expanded': !collapsed, onClick: () => store.toggleScope(scope) },
           h(collapsed ? IconChevronRightOutlineRegular : IconChevronDownOutlineRegular, { size: 12 }), h('span', null, title), h('span', { className: 'imqq-count' }, scoped.length)),
-        !collapsed ? scoped.length ? scoped.map((peer) => h(PeerRow, { key: peer.entry.key, peer, store,
+        !collapsed ? scoped.length ? scoped.map((peer) => h(PeerRow, { key: peer.entry.key, peer, store, t,
           expanded: Boolean(sidebar.search.trim()) || sidebar.expandedPeers.includes(peer.entry.key),
           showAll: sidebar.showAllPeers.includes(peer.entry.key), selectedSessionId: sidebar.selectedSessionId,
           onDialog: setDialog })) : h('p', { className: 'imqq-empty' }, state.loading && !state.directory ? '正在读取…' : sidebar.search ? '无匹配结果' : scope === 'group' ? '尚未发现群聊' : '尚未发现联系人') : null);
@@ -58,8 +59,8 @@ export function QQSidebar({ store, actions, defaultWorkspaceName, wide, expandSi
     dialog ? h(SidebarEditDialog, { key: dialog.sessionId, target: dialog, store, actions, onClose: () => setDialog(null) }) : null);
 }
 
-function PeerRow({ peer, store, expanded, showAll, selectedSessionId, onDialog }: {
-  peer: QQSidebarPeer; store: QQSessionStore; expanded: boolean; showAll: boolean; selectedSessionId: string | null; onDialog: (dialog: SidebarDialog) => void;
+function PeerRow({ peer, store, t, expanded, showAll, selectedSessionId, onDialog }: {
+  peer: QQSidebarPeer; store: QQSessionStore; t: QQTranslate; expanded: boolean; showAll: boolean; selectedSessionId: string | null; onDialog: (dialog: SidebarDialog) => void;
 }): ReactNode {
   const [menuOpen, setMenuOpen] = useState(false);
   const { entry, name, currentSession } = peer;
@@ -75,35 +76,33 @@ function PeerRow({ peer, store, expanded, showAll, selectedSessionId, onDialog }
         h(entry.scope === 'group' ? IconUsersOutlineRegular : IconUserOutlineRegular, { size: 15 }),
         h('span', { className: 'imqq-peerText' }, h('span', { className: 'imqq-peerName' }, name), peer.currentSummary ? h('span', { className: 'imqq-peerSummary' }, peer.currentSummary) : null),
         !entry.admitted ? h('span', { className: 'imqq-tag' }, '待授权') : !currentSession ? h('span', { className: 'imqq-tag' }, '未开始')
-          : h('span', { className: 'imqq-currentTags' }, h('span', { className: 'imqq-current', title: 'QQ 消息进入此会话', 'aria-label': '当前生效会话' }, '当前会话'),
-            entry.running ? h('span', { className: 'imqq-running', title: '正在回复', 'aria-label': '正在回复' }) : null)),
+          : entry.running ? h('span', { className: 'imqq-running', title: t('sidebar.receiving'), 'aria-label': t('sidebar.receiving') }) : null),
+      h(Button, { variant: 'ghost', size: 'sm', className: 'imqq-quickAdd', 'aria-label': t('sidebar.newSession.aria', { name }), title: t('sidebar.newSession'), disabled: !entry.admitted || entry.running, onClick: () => store.openOperation(entry) }, h(IconPlusOutlineRegular, { size: 14 })),
       h(Menu, { open: menuOpen, onClose: () => setMenuOpen(false), portal: true, align: 'end', compact: true,
         anchor: h(Button, { variant: 'ghost', size: 'sm', className: 'imqq-menuTrigger', 'aria-label': `管理${name}`, 'aria-haspopup': 'menu', 'aria-expanded': menuOpen, onClick: () => setMenuOpen(!menuOpen) }, '···'),
         items: [{ type: 'label', id: 'current-label', text: '当前会话' },
           { id: 'rename', label: '重命名当前会话…', disabled: !currentSession },
-          { id: 'newSession', label: '新建会话…', disabled: !entry.admitted || entry.running },
           { id: 'settings', label: '当前会话设置…' },
           { type: 'separator', id: 'qq-separator' }, { type: 'label', id: 'qq-label', text: entry.scope === 'group' ? 'QQ 群聊' : 'QQ 联系人' },
           { id: 'messages', label: '消息记录…' }],
         onSelect: (id) => {
           setMenuOpen(false);
           if (id === 'rename' && currentSession) onDialog({ kind: 'rename', sessionId: currentSession.sessionId, title: currentSession.nativeTitle ?? '' });
-          else if (id === 'newSession') store.openOperation(entry);
           else store.openDrawer(entry, id === 'messages' ? 'messages' : 'settings');
         } })),
     expanded && (hasHistory || currentSession) ? h('div', { className: 'imqq-sessions', 'aria-label': `${name}的会话` },
-      currentSession ? h(SessionRow, { key: currentSession.sessionId, session: currentSession, entry, store, selected: selectedSessionId === currentSession.sessionId, current: true, onDialog }) : null,
-      ...sessions.map((session) => h(SessionRow, { key: session.sessionId, session, entry, store, selected: selectedSessionId === session.sessionId, onDialog })),
+      currentSession ? h(SessionRow, { key: currentSession.sessionId, session: currentSession, entry, store, t, selected: selectedSessionId === currentSession.sessionId, current: true, onDialog }) : null,
+      ...sessions.map((session) => h(SessionRow, { key: session.sessionId, session, entry, store, t, selected: selectedSessionId === session.sessionId, onDialog })),
       peer.historySessions.length > sessions.length ? h('button', { type: 'button', className: 'imqq-more', onClick: () => store.showAllSessions(entry.key) }, `查看更多历史 · 还有 ${peer.historySessions.length - sessions.length} 条`) : null) : null);
 }
 
-function SessionRow({ session, entry, store, selected, current = false, onDialog }: {
-  session: QQSidebarSession; entry: ConversationView; store: QQSessionStore; selected: boolean; current?: boolean; onDialog: (dialog: SidebarDialog) => void;
+function SessionRow({ session, entry, store, t, selected, current = false, onDialog }: {
+  session: QQSidebarSession; entry: ConversationView; store: QQSessionStore; t: QQTranslate; selected: boolean; current?: boolean; onDialog: (dialog: SidebarDialog) => void;
 }): ReactNode {
   const [menuOpen, setMenuOpen] = useState(false);
   return h('div', { className: 'imqq-sessionRow', 'data-selected': selected, 'data-current': current },
     h('button', { type: 'button', className: 'imqq-sessionOpen', 'aria-current': selected ? 'page' : undefined, onClick: () => store.openSession(session.sessionId, { preserveVisibleFilter: true }), title: `${session.title}\n${current ? '当前生效会话' : '历史会话'}\n${session.workspace}${session.path && session.path !== session.workspace ? `\n${session.path}` : ''}` },
-      h('span', { className: 'imqq-sessionTitle' }, h('span', { className: 'imqq-sessionTitleText', title: session.title }, session.title), current ? h('span', { className: 'imqq-sessionCurrent' }, '当前') : null),
+      h('span', { className: 'imqq-sessionTitle' }, h('span', { className: 'imqq-sessionTitleText', title: session.title }, session.title), current ? h('span', { className: 'imqq-sessionCurrent', title: t('sidebar.current.title') }, t('sidebar.current')) : null),
       h('span', { className: 'imqq-sessionMeta' }, h('span', { className: 'imqq-workspace' }, session.workspace))),
     h(Menu, { open: menuOpen, onClose: () => setMenuOpen(false), portal: true, align: 'end', compact: true,
       anchor: h(Button, { variant: 'ghost', size: 'sm', className: 'imqq-menuTrigger', 'aria-label': `会话菜单 ${session.title}`, 'aria-haspopup': 'menu', 'aria-expanded': menuOpen, onClick: () => setMenuOpen(!menuOpen) }, '···'),

@@ -15,6 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { QQAgentSettingsForm } from './qq-agent-settings-form.ts';
 import { QQDefaultsSettings } from './qq-defaults-settings.ts';
 import { QQPeerSettings } from './qq-peer-settings.ts';
+import { testT } from './qq-locale.ts';
 import { QQSessionStore } from './qq-session-store.ts';
 import { defaultPolicy } from '../policy/validation.ts';
 
@@ -66,7 +67,7 @@ async function toggle(label) {
   if (!checkbox) throw new Error(`Missing toggle ${label}`);
   await act(async () => checkbox.click());
 }
-function peer(store, value) { return h(QQPeerSettings, { store, entry: value, tools, selectorSource: selectors }); }
+function peer(store, value) { return h(QQPeerSettings, { store, entry: value, tools, selectorSource: selectors, t: testT }); }
 function snapshot(store, value, defaults = store.getSnapshot().directory.defaults) { return { snapshot: { conversations: [value], tools, ownerIds: [], defaults } }; }
 
 describe('shared Agent settings draft form', () => {
@@ -115,7 +116,8 @@ describe('peer settings persistence', () => {
       settings: { ...value.settings, cwd: '/next', prompt: '下次会话的指令' }, recording: { expectedVersion: 1, maxMessages: 200 } });
     expect(container.textContent).toContain('下次新会话生效');
     expect(store.getSnapshot().overlay).toBeNull();
-    await click('新建会话…'); expect(store.getSnapshot().overlay.kind).toBe('operation');
+    // 会话设置面板不再内嵌"新建会话"入口（改由左侧栏每个对话提供）
+    expect(container.textContent).not.toContain('新建会话');
     expect(perform).toHaveBeenCalledTimes(1);
   });
   it('saves count zero independently while running and keeps a separate settings draft', async () => {
@@ -171,18 +173,18 @@ describe('global new-peer defaults', () => {
   it('saves guarded defaults through the directory API without a profile write', async () => {
     const { store, value, perform } = setup(); const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     perform.mockResolvedValue(snapshot(store, value, { version: 2, settings: settings({ prompt: 'new peers only' }) }));
-    await act(async () => root.render(h(QQDefaultsSettings, { store, selectorSource: selectors })));
-    await edit('补充提示词', 'new peers only'); await click('保存默认设置');
+    await act(async () => root.render(h(QQDefaultsSettings, { store, selectorSource: selectors, t: testT })));
+    await edit('补充提示词', 'new peers only'); await click('保存默认设置（即时生效）');
     expect(perform).toHaveBeenCalledExactlyOnceWith({ action: 'defaults', expectedVersion: 1, settings: settings({ prompt: 'new peers only' }) });
     expect(fetch).not.toHaveBeenCalled(); expect(store.conversation(value.key).settings.prompt).toBe('');
     expect(container.textContent).toContain('已接入的对话保持各自设置');
   });
   it('preserves a conflicting defaults draft, then reloads only after discard', async () => {
     const { store, value, perform } = setup();
-    await act(async () => root.render(h(QQDefaultsSettings, { store, selectorSource: selectors })));
+    await act(async () => root.render(h(QQDefaultsSettings, { store, selectorSource: selectors, t: testT })));
     await edit('工作目录', '/local');
     await act(async () => store.accept(snapshot(store, value, { version: 2, settings: settings({ cwd: '/remote' }) }).snapshot));
-    expect(field('工作目录').value).toBe('/local'); expect(button('保存默认设置').disabled).toBe(true);
+    expect(field('工作目录').value).toBe('/local'); expect(button('保存默认设置（即时生效）').disabled).toBe(true);
     expect(perform).not.toHaveBeenCalled(); await click('放弃默认设置修改'); expect(field('工作目录').value).toBe('/remote');
   });
 });
