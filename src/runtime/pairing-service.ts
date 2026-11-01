@@ -11,9 +11,9 @@
 import { generatePairCode, normalizePairCode, type ClaimedMember, type PairChallenge, type PairPurpose } from '../shared/pairing-protocol.ts';
 
 /** 配对码有效期（毫秒）。 */
-const CODE_TTL_MS = 3 * 60 * 1000;
+const CODE_TTL_MS = 10 * 60 * 1000;
 /** 输码后等待用户点"确认"的有效期。 */
-const CONFIRM_TTL_MS = 2 * 60 * 1000;
+const CONFIRM_TTL_MS = 5 * 60 * 1000;
 /** 同时进行中的码上限。 */
 const MAX_PENDING = 20;
 
@@ -82,6 +82,13 @@ export class PairingService {
 
   // ── 待确认（QQ 输码后、用户点"确认"前）──
   private readonly pendingConfirms = new Map<string, { purpose: PairPurpose; actor: PendingActor; expiresAt: number }>();
+
+  /** 是否存在一个未过期的进行中配对码（用于裸 token 拦截判断，不核销）。 */
+  hasActiveCode(rawCode: string): boolean {
+    const code = normalizePairCode(rawCode);
+    const entry = this.pending.get(code);
+    return entry !== undefined && this.now() <= entry.expiresAt;
+  }
 
   /** 记录一个待确认认领，返回 nonce（按钮回调携带）。 */
   beginConfirm(purpose: PairPurpose, actor: PendingActor): string {

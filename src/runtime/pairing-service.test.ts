@@ -17,7 +17,7 @@ describe('pairing service', () => {
     let t = 1000;
     const svc = new PairingService({ now: () => t });
     const c = svc.issue('allow-c2c');
-    t += 3 * 60 * 1000 + 1;
+    t += 10 * 60 * 1000 + 1;
     expect(svc.consume(c.code)).toEqual({ ok: false, reason: 'expired' });
   });
 

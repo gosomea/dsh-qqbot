@@ -17,6 +17,8 @@ export const PAIR_STATUS_PATH = '/qqbot/im-qqbot/pair/status';
 export const PAIR_REVOKE_PATH = '/qqbot/im-qqbot/pair/revoke';
 /** Web 手动按 openID 直接添加成员（用户自行输入 openid） */
 export const PAIR_MANUAL_PATH = '/qqbot/im-qqbot/pair/manual';
+/** Web 修改成员昵称 */
+export const PAIR_RENAME_PATH = '/qqbot/im-qqbot/pair/rename';
 
 /** 认领目标用途：决定把 openid 记到哪一类名单。 */
 export type PairPurpose = 'owner' | 'allow-c2c' | 'allow-group';

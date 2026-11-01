@@ -92,12 +92,22 @@ export function installConversationStyles(): void {
 .imqc-pair { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); }
 .imqc-pair > .imqc-inline { justify-content: space-between; }
 .imqc-pairCode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.imqc-pairDialog { display: flex; flex-direction: column; gap: 8px; }
+.imqc-pairSectionTitle { margin: 10px 0 2px; font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.imqc-pairSteps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.imqc-pairExample { margin: 0; padding: 8px 10px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); font-size: 12px; white-space: pre-wrap; color: var(--dsw-alias-label-secondary); }
+.imqc-pairTextarea { box-sizing: border-box; width: 100%; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); font: inherit; color: var(--dsw-alias-label-primary); line-height: 1.5; resize: vertical; }
+.imqc-pairModal { width: min(560px, calc(100vw - 32px)); }
 .imqc-pairManual { flex-wrap: nowrap; }
 .imqc-pairManual > :first-child { flex: 1; min-width: 120px; }
 .imqc-pairCode code { font-size: 15px; font-weight: 600; letter-spacing: 1px; padding: 2px 8px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .imqc-pairMembers { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.imqc-pairMembers > li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 0.5px solid var(--dsw-alias-border-l2); }
-.imqc-pairMembers > li > span { min-width: 0; overflow-wrap: anywhere; }
+.imqc-pairMember { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); }
+.imqc-pairMemberMain { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.imqc-pairMemberName { font-size: 13px; font-weight: 500; color: var(--dsw-alias-label-primary); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.imqc-pairMemberMeta { font-size: 11px; color: var(--dsw-alias-label-tertiary); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.imqc-pairMemberActions, .imqc-pairMemberEdit { flex: none; }
+.imqc-pairMemberEdit > :first-child { width: 140px; }
 .imqc-preview pre, .imqc-messageText { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 7px 0; }
 .imqc-history { display: grid; gap: 5px; }
 .imqc-history button { text-align: left; overflow-wrap: anywhere; }

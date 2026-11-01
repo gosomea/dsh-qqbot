@@ -473,5 +473,18 @@ describe('pairing-code claim (two-phase)', () => {
     expect(handled).toBe(true);
     expect(f.service.store.ownerIds()).toContain('btn-oid');
   });
+
+  it('adds multiple openIDs with openid:nickname syntax and renames a member', () => {
+    const f = fixture();
+    const r = f.service.addManualMember('owner', 'oid-a\noid-b:张三\noid-c：Alice Zhang');
+    expect(r.ok).toBe(true);
+    expect(r.added).toBe(3);
+    const map = Object.fromEntries(f.service.pairStatus().owners.map((m) => [m.openid, m.nickname]));
+    expect(map['oid-a']).toBe('');
+    expect(map['oid-b']).toBe('张三');
+    expect(map['oid-c']).toBe('Alice Zhang');
+    expect(f.service.renameMember('oid-b', '张三丰').ok).toBe(true);
+    expect(f.service.pairStatus().owners.find((m) => m.openid === 'oid-b')?.nickname).toBe('张三丰');
+  });
 });
 

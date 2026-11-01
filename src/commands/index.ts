@@ -17,9 +17,10 @@ import { helpCommand } from './help.ts';
 import { pingCommand, versionCommand, stopCommand } from './misc.ts';
 import { getScopePeer } from '../shared/index.ts';
 import { encodeButtonData } from '../features/button-utils.ts';
+import type { InlineKeyboard } from '@tencent-connect/qqbot-nodejs';
 
 /** 构造"确认/取消认领"内联键盘（button_data 带 t=claim + nonce）。 */
-function buildClaimKeyboard(nonce: string): unknown {
+export function buildClaimKeyboard(nonce: string): InlineKeyboard {
   const mk = (d: 'confirm' | 'cancel', label: string, style: number) => ({
     id: `claim-${d}`, render_data: { label, visited_label: label, style },
     action: { type: 1, permission: { type: 2 }, click_limit: 1, data: encodeButtonData({ t: 'claim', d, n: nonce }) },

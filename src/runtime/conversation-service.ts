@@ -200,15 +200,23 @@ export class ConversationService {
   /** 读取已认领成员：超管来自 store.owners + memberProfiles；白名单来自 store 的 access。 */
   pairStatus(): PairStatusWire {
     const profiles = this.store.memberProfiles();
-    const owners: ClaimedMember[] = this.store.ownerIds().map((openid) => this.toMember(openid, profiles[openid], 'c2c'));
+    const claimed = this.pairing.listClaimed();
+    const toMember = (openid: string, scene: 'group' | 'c2c'): ClaimedMember => {
+      const profile = profiles[openid];
+      const cached = claimed.find((m) => m.openid === openid);
+      return {
+        openid,
+        nickname: profile?.nickname || cached?.nickname || '',
+        scene: profile?.scene ?? cached?.scene ?? scene,
+        sceneName: profile?.sceneName || cached?.sceneName || '',
+        claimedAt: profile?.claimedAt ?? cached?.claimedAt ?? 0,
+      };
+    };
+    const owners: ClaimedMember[] = this.store.ownerIds().map((openid) => toMember(openid, 'c2c'));
     const access = this.config.access;
-    const allowC2c: ClaimedMember[] = [...access.c2cAllow].map((openid) => this.toMember(openid, profiles[openid], 'c2c'));
-    const allowGroup: ClaimedMember[] = [...access.groupAllow].map((openid) => this.toMember(openid, profiles[openid], 'group'));
+    const allowC2c: ClaimedMember[] = [...access.c2cAllow].map((openid) => toMember(openid, 'c2c'));
+    const allowGroup: ClaimedMember[] = [...access.groupAllow].map((openid) => toMember(openid, 'group'));
     return { challenges: this.pairing.listChallenges(), owners, allowC2c, allowGroup };
-  }
-
-  private toMember(openid: string, profile: { nickname: string; scene: 'group' | 'c2c'; sceneName: string; claimedAt: number } | undefined, scene: 'group' | 'c2c'): ClaimedMember {
-    return { openid, nickname: profile?.nickname ?? '', scene: profile?.scene ?? scene, sceneName: profile?.sceneName ?? '', claimedAt: profile?.claimedAt ?? 0 };
   }
 
   /** 把（openid + 展示资料）写入指定名单（超管 / 私聊白名单 / 群白名单）。返回是否成功。 */
@@ -224,6 +232,7 @@ export class ConversationService {
       ? { ...access, groupMode: 'allowlist' as const, groupAllow: [...new Set([...access.groupAllow, openid])] }
       : { ...access, c2cMode: 'allowlist' as const, c2cAllow: [...new Set([...access.c2cAllow, openid])] };
     const persisted = updateProfileConfig({ access: nextAccess }, getProfileDir() ?? undefined, this.logger);
+    if (persisted) this.config.access = nextAccess;
     if (!persisted) return { ok: false, message: `⚠️ 已匹配「${nickname || openidTail(openid)}」，但写入 profile 失败（源码直载？）。请手动加入白名单。` };
     return { ok: true, message: `✅ 已把「${nickname || openidTail(openid)}」加入${purpose === 'allow-group' ? '群' : '私聊'}白名单。` };
   }
@@ -232,6 +241,22 @@ export class ConversationService {
    * QQ 第一阶段：核销配对码，记录"待确认"，返回确认文案 + nonce（供发确认按钮）。
    * 不写名单——等用户点「确认」再 applyClaim。
    */
+  /** 该文本是否是一个进行中的配对码（供"裸 token"拦截判断，不核销）。 */
+  isActivePairCode(text: string): boolean { return this.pairing.hasActiveCode(text); }
+
+  /** 由 QQ 侧发起认领（/claim 命令或裸 token 共用）：解析 actor + startClaim。 */
+  beginClaimFromMessage(scope: ChatScope, peerId: string, code: string, senderId: string, senderName?: string): { ok: boolean; message: string; nonce?: string } {
+    const entry = this.entry(scope, peerId);
+    const actor: PendingActor = {
+      openid: senderId,
+      nickname: senderName ?? (scope === 'group' ? (entry.name || entry.alias) : (entry.alias || entry.name)) ?? '',
+      scope: scope === 'group' ? 'group' : 'c2c',
+      sceneName: scope === 'group' ? (entry.name || entry.alias || '本群') : (entry.alias || entry.name || '私聊'),
+    };
+    const result = this.startClaim(code, actor);
+    return { ok: result.ok, message: result.message, ...(result.nonce === undefined ? {} : { nonce: result.nonce }) };
+  }
+
   startClaim(rawCode: string, actor: PendingActor): { ok: boolean; message: string; nonce?: string; purpose?: PairPurpose } {
     const result = this.pairing.consume(rawCode);
     if (!result.ok) {
@@ -272,10 +297,31 @@ export class ConversationService {
    * Web：手动按 openID 直接添加成员（超管 / 白名单）。允许用户自行输入 openid。
    * 显示昵称留空，待日后其在 QQ 发言或认领时补全。
    */
-  addManualMember(purpose: PairPurpose, openid: string): { ok: boolean; message: string } {
+  addManualMember(purpose: PairPurpose, input: string): { ok: boolean; message: string; added: number } {
+    // 支持一次添加多个：按换行/英文逗号/中文逗号分隔；每条支持 "openID" 或 "openID:昵称"。
+    const parts = String(input).split(/[\n,,;；]+/).map((v) => v.trim()).filter(Boolean);
+    if (parts.length === 0) return { ok: false, message: '请填写 openID', added: 0 };
+    const scene: 'group' | 'c2c' = purpose === 'allow-group' ? 'group' : 'c2c';
+    let added = 0; const errors: string[] = [];
+    for (const part of parts) {
+      // 冒号分隔 openID 与昵称（中文/英文冒号都认），昵称可含空格/中英文
+      const sep = part.indexOf(':') >= 0 ? part.indexOf(':') : part.indexOf('：');
+      const id = (sep >= 0 ? part.slice(0, sep) : part).trim();
+      const nickname = sep >= 0 ? part.slice(sep + 1).trim() : '';
+      if (!id || id.length > 1024) { errors.push(`「${part}」openID 无效`); continue; }
+      const r = this.applyMember(purpose, id, nickname, scene, '');
+      if (r.ok) added += 1; else errors.push(r.message);
+    }
+    if (added === 0) return { ok: false, message: errors[0] ?? '添加失败', added: 0 };
+    return { ok: true, added, message: `已添加 ${added} 项${errors.length ? `；${errors.length} 项失败` : ''}` };
+  }
+
+  /** Web：修改成员显示昵称（openid 身份不变）。 */
+  renameMember(openid: string, nickname: string): { ok: boolean; message: string } {
     const id = openid.trim();
-    if (!id || id.length > 1024) return { ok: false, message: 'openID 无效' };
-    return this.applyMember(purpose, id, '', purpose === 'allow-group' ? 'group' : 'c2c', '');
+    if (!id) return { ok: false, message: 'openID 无效' };
+    this.store.setMemberNickname(id, nickname.trim());
+    return { ok: true, message: '昵称已更新' };
   }
 
   /** Web：撤销一个已认领身份（超管 / 白名单）。 */
@@ -287,6 +333,7 @@ export class ConversationService {
       ? { ...access, groupAllow: access.groupAllow.filter((id) => id !== openid) }
       : { ...access, c2cAllow: access.c2cAllow.filter((id) => id !== openid) };
     const persisted = updateProfileConfig({ access: nextAccess }, getProfileDir() ?? undefined, this.logger);
+    if (persisted) this.config.access = nextAccess;
     return { ok: persisted, message: persisted ? '已从白名单移除' : '写入失败，请手动移除' };
   }
   isOwner(actor?: string): boolean { return !!actor && this.store.ownerIds().includes(actor); }

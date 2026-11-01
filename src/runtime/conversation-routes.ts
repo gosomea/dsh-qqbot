@@ -2,7 +2,7 @@ import { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import type { Context } from '@deepseek-ai/cordis';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { CONVERSATIONS_PATH, type ConversationActionResult } from '../shared/conversation-protocol.ts';
-import { PAIR_ISSUE_PATH, PAIR_MANUAL_PATH, PAIR_REVOKE_PATH, PAIR_STATUS_PATH, type PairPurpose } from '../shared/pairing-protocol.ts';
+import { PAIR_ISSUE_PATH, PAIR_MANUAL_PATH, PAIR_RENAME_PATH, PAIR_REVOKE_PATH, PAIR_STATUS_PATH, type PairPurpose } from '../shared/pairing-protocol.ts';
 import type { WebServerLike } from '../setup/bind-routes.ts';
 import type { ConversationService } from './conversation-service.ts';
 import { ConversationConflictError } from '../conversations/index.ts';
@@ -129,6 +129,12 @@ export function registerConversationRoutes(ctx: Context, service: ConversationSe
           const result = service.addManualMember(purpose as PairPurpose, openid);
           return json(res, result.ok ? 200 : 400, { ...result, ...service.pairStatus() });
         }
+        if (pathname === PAIR_RENAME_PATH) {
+          const openid = field(body, 'openid');
+          const nickname = typeof body.nickname === 'string' ? body.nickname : '';
+          const result = service.renameMember(openid, nickname);
+          return json(res, result.ok ? 200 : 400, { ...result, ...service.pairStatus() });
+        }
         if (pathname === PAIR_REVOKE_PATH) {
           const openid = field(body, 'openid'); const purpose = body.purpose;
           if (purpose !== 'owner' && purpose !== 'allow-c2c' && purpose !== 'allow-group') throw new Error('认领用途无效');
@@ -144,6 +150,7 @@ export function registerConversationRoutes(ctx: Context, service: ConversationSe
     disposers.push(server.register({ kind: 'exact', path: PAIR_ISSUE_PATH, handler: pairHandler }));
     disposers.push(server.register({ kind: 'exact', path: PAIR_REVOKE_PATH, handler: pairHandler }));
     disposers.push(server.register({ kind: 'exact', path: PAIR_MANUAL_PATH, handler: pairHandler }));
+    disposers.push(server.register({ kind: 'exact', path: PAIR_RENAME_PATH, handler: pairHandler }));
     scoped.effect(() => () => { for (const dispose of disposers) dispose(); }, 'im-qqbot.conversations');
   });
 }

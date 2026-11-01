@@ -20,7 +20,7 @@ import {
 import type { ImQQBotConfig } from '../config.ts';
 import type { SessionManager } from '../session/index.ts';
 import type { Logger } from '../types.ts';
-import { buildCommandList } from '../commands/index.ts';
+import { buildCommandList, buildClaimKeyboard } from '../commands/index.ts';
 import { attachmentProcessor } from '../middleware/attachment.ts';
 import { questionAnswer } from '../middleware/question-answer.ts';
 import { conversationGate, conversationDiscovery } from './conversation-gate.ts';
@@ -91,6 +91,21 @@ export function setupMiddlewares(
     if (ctx.message.content.trim().startsWith('/')) {
       await ctx.bot.sendText(ctx.replyTarget, '未知命令，请发送 /bot-help 查看可用命令。');
       ctx.stop('unknown-command'); return;
+    }
+    await next();
+  });
+  // 裸 token 认领：仅当消息文本恰好是"当前正在生成、未过期的配对码"时才拦截；否则原样放行给 agent。
+  bot.use(async (ctx, next) => {
+    const service = manager.conversations;
+    const content = ctx.message.content.trim();
+    if (service && content.length > 0 && content.length <= 32 && service.isActivePairCode(content)) {
+      const result = service.beginClaimFromMessage(ctx.replyTarget.scope, ctx.replyTarget.targetId, content, ctx.message.senderId, ctx.message.senderName);
+      if (result.nonce !== undefined) {
+        await ctx.bot.sendMarkdown(ctx.replyTarget, result.message, { keyboard: buildClaimKeyboard(result.nonce) });
+        ctx.stop('claim-pending'); return;
+      }
+      await ctx.bot.sendText(ctx.replyTarget, result.message);
+      ctx.stop('claim-result'); return;
     }
     await next();
   });

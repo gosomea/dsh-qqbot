@@ -134,6 +134,14 @@ export class ConversationStore {
   }
   /** 全部认领成员资料（openid -> profile）。 */
   public memberProfiles(): Record<string, MemberProfile> { return clone(this.catalog.memberProfiles ?? {}); }
+  /** 更新某成员的展示昵称（不改 openid 身份）。 */
+  public setMemberNickname(openid: string, nickname: string): void {
+    this.assertWritable();
+    const profiles = { ...(this.catalog.memberProfiles ?? {}) };
+    const prev = profiles[openid];
+    profiles[openid] = { nickname, scene: prev?.scene ?? 'c2c', sceneName: prev?.sceneName ?? '', claimedAt: prev?.claimedAt ?? Date.now() };
+    this.commit({ ...this.catalog, memberProfiles: profiles });
+  }
   /** 认领：把 openid 加入 owners 并记录展示资料（幂等，重复认领更新资料/时间）。 */
   public claimOwner(openid: string, profile: MemberProfile): void {
     this.assertWritable();
