@@ -86,7 +86,7 @@ export function QQConversationOverlay({ store, selectorSource, t, useWorkspaces,
   if (overlay?.kind === 'drawer') {
     const target = overlay.target;
     const entry = store.conversation(target.key);
-    return h(Modal, { key: `${target.key}/${target.sessionId}`, title: `${target.name} · QQ 设置`, open: true, closeLabel: '关闭', className: 'imqq-settingsModal', onClose: store.closeDrawer,
+    return h(Modal, { key: `${target.key}/${target.sessionId}`, title: `${target.name} · QQ 设置`, open: true, closeLabel: '关闭', className: 'imqq-settingsModal', contentClassName: 'imqq-settingsContent', onClose: store.closeDrawer,
       children: entry ? h(QQConversationView, { sessionId: target.sessionId, conversationKey: target.key, initialTab: target.tab, store, selectorSource, t, useSessions, useWorkspaces, defaultWorkspaceName }) : h('p', { role: 'alert' }, '此 QQ 对话已不可用，请刷新目录。') });
   }
   if (overlay?.kind === 'operation') return h(QQOperationDialog, { key: `${overlay.target.kind}/${overlay.target.key}`, target: overlay.target, store, selectorSource, workspaces, defaultWorkspaceName });
