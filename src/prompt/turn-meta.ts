@@ -11,6 +11,8 @@ export interface TurnMeta {
   scope: QQScope;
   /** 发送者展示名。 */
   senderName?: string;
+  /** 发送者 QQ openid/号（群聊 @ 时一并给模型，便于称呼与区分）。 */
+  senderId?: string;
   /** 群聊是否 @ 了机器人。 */
   mentioned?: boolean;
   /** 本轮消息时间（epoch ms）；私聊/群聊均可有。 */
@@ -44,8 +46,9 @@ export function clockOf(at: number | undefined): string {
 export function turnMetaText(meta: TurnMeta): string {
   const parts: string[] = [];
   parts.push(`来源：QQ ${meta.scope === 'group' ? '群聊' : '私聊'}`);
-  if (meta.scope === 'group' && meta.mentioned) parts.push('@：本轮消息 @ 了你');
-  if (meta.senderName) parts.push(`发送者：${meta.senderName}`);
+  const who = meta.senderName ? (meta.senderId ? `${meta.senderName}（QQ ${meta.senderId}）` : meta.senderName) : (meta.senderId ? `QQ ${meta.senderId}` : '');
+  if (who) parts.push(`发送者：${who}`);
+  if (meta.scope === 'group' && meta.mentioned) parts.push(`@：${meta.senderName ? `「${meta.senderName}」` : '本轮消息'} @ 了你`);
   const rel = relTime(meta.at, meta.now);
   const clock = clockOf(meta.at);
   if (rel) parts.push(clock ? `时间：${clock}（${rel}）` : `时间：${rel}`);

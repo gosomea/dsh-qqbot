@@ -50,3 +50,39 @@ export function QQSelect({ label, value, onChange, options, placeholder = '请�
 export function qqWorkspaceTitle(title: string, path: string, localizedDefault: string): string {
   return workspaceDisplayTitle(title, localizedDefault) || path;
 }
+
+/** 工作区/工作目录选项来源（统一的 cwd 选择器共用）。 */
+export interface WorkspaceCwdOption { workspaceId: string; title: string; path: string }
+export interface WorkspaceCwdSelectProps {
+  /** 当前值：工作区路径；空字符串表示"留空使用 QQ 默认工作目录"。 */
+  value: string;
+  /** 可选工作区（含 DSH 原生默认工作区，作为普通选项）。 */
+  workspaces: ReadonlyArray<WorkspaceCwdOption>;
+  /** "留空"时使用的 QQ 默认工作目录（zTePgS 临时选择器目录）。 */
+  defaultCwd?: string;
+  /** DSH 默认工作区名（本地化）。 */
+  defaultWorkspaceName?: string;
+  disabled?: boolean;
+  label?: string;
+  /** 选择"+ 添加工作区（选择文件夹…)"时回调；未提供则不显示该项。 */
+  onAddWorkspace?: () => void;
+  /** 选中某工作区或"留空"时回调（path；""=留空）。 */
+  onChange: (path: string) => void;
+}
+/** 统一的"工作目录"选择器：留空默认 → 各 DSH 工作区 → 添加工作区。三处（会话设置/新对话默认值/新建会话）共用。 */
+export function WorkspaceCwdSelect({ value, workspaces, defaultCwd, defaultWorkspaceName = '默认工作区', disabled = false, label = '工作目录', onAddWorkspace, onChange }: WorkspaceCwdSelectProps): ReactNode {
+  const ADD = '::add-workspace';
+  const options: QQSelectOption[] = [
+    { value: '', label: '留空使用 QQ 默认工作目录', description: defaultCwd },
+    ...workspaces.map(ws => ({ value: ws.path, label: qqWorkspaceTitle(ws.title, ws.path, defaultWorkspaceName), description: ws.path })),
+    ...(onAddWorkspace ? [{ value: ADD, label: '＋ 添加工作区（选择文件夹…）' }] : []),
+  ];
+  const visible = value === '' || workspaces.some(ws => ws.path === value) ? value : '';
+  return h('div', { className: 'imqc-field' },
+    h('span', null, label),
+    h(QQSelect, { label, value: visible, disabled, placeholder: '选择工作区', options, onChange: id => {
+      if (id === ADD) { onAddWorkspace?.(); return; }
+      onChange(id);
+    } }),
+    defaultCwd ? h('p', { className: 'imqc-hint' }, `留空时使用默认工作目录：${defaultCwd}`) : null);
+}

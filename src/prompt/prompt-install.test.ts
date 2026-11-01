@@ -52,9 +52,9 @@ describe('installQQPrompt (DSH section/context 注册)', () => {
   it('turn-meta reflects setTurnMeta', () => {
     const sp = fakeSystemPrompt(); const h = installQQPrompt(sp.ctx, entry());
     expect(sp.renderContexts()).toBe('');
-    h.setTurnMeta({ scope: 'group', senderName: '张三', mentioned: true, at: 1000, now: 1000 + 120000 });
+    h.setTurnMeta({ scope: 'group', senderName: '张三', senderId: 'openid-123', mentioned: true, at: 1000, now: 1000 + 120000 });
     const m = sp.renderContexts();
-    expect(m).toContain('QQ 群聊'); expect(m).toContain('@ 了你'); expect(m).toContain('发送者：张三'); expect(m).toContain('2 分钟前');
+    expect(m).toContain('QQ 群聊'); expect(m).toContain('@ 了你'); expect(m).toContain('发送者：张三（QQ openid-123）'); expect(m).toContain('「张三」'); expect(m).toContain('2 分钟前');
     h.dispose();
   });
 });
