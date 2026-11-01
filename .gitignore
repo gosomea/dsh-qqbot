@@ -1,9 +1,6 @@
 node_modules/
 dist/
-docs/*
-!docs/native-sessions.md
-!docs/native-sessions.en.md
-!docs/settings-and-message-records.md
+# docs 结构：guides/(用户文档) decisions/(方案与审查) scratch/(一次性交接与验收)
 .env
 .dsh-sessions/
 *.tsbuildinfo

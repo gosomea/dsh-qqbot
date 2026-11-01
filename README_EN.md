@@ -24,9 +24,27 @@ Scan to join the QQ group / channel
 
 </div>
 
+## Summary
+
+dsh-qqbot is a DeepSeek Harness (dsh) **bundle plugin** that connects a dsh agent to QQ private chats and groups. On install it inserts one plugin row into a chosen profile and reuses the native Session, Inbox, workspace and client extension interfaces without patching the host. You can bind bot credentials by QR-code login from the web UI or phone; @-mention the bot in QQ to get native agent answers (model, tools, permissions, approvals); manage conversations, history and per-conversation settings from a dedicated left rail grouped by groups/DMs; and view message records with Markdown and image/video/file previews. Main costs: the QQ passive-reply window is short (5 min for groups), a send only confirms platform acceptance rather than delivery, and QQ only receives the final text, not a stream.
+
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Conversations and per-group settings](#conversations-and-per-group-settings)
+- [Configuration](#configuration)
+- [Built-in Commands](#built-in-commands)
+- [Core Modules](#core-modules)
+- [Session Routing](#session-routing)
+- [Design Principles](#design-principles)
+- [Known Limitations](#known-limitations)
+- [Dev Note](#dev-note)
+- [Local Development](#local-development)
+
 ## Architecture
 
-> This development build uses public APIs from unmodified DSH. QQ has independent group/private navigation in the left sidebar and uses the native main conversation view and composer. See the [usage and migration guide](./docs/native-sessions.en.md) for supported behavior and limitations. This build is not published.
+> This development build uses public APIs from unmodified DSH. QQ has independent group/private navigation in the left sidebar and uses the native main conversation view and composer. See the [usage and migration guide](./docs/guides/native-sessions.en.md) for supported behavior and limitations. This build is not published.
 
 ```
 QQ User → QQ WebSocket → dsh-qqbot → ctx.agents → dsh agent loop → LLM
@@ -205,6 +223,9 @@ Model and next-session preset priority is **phone command override → QQ Web de
 
 In groups, use `@bot /command`; private chats accept `/command` directly. Queries are available to admitted members. Changing models, presets, or permissions and resetting or compacting a group Session requires the owner or that group's controller, within the group's allowed choices. The current requester, a controller, or the owner can `/stop`. Other changes report busy during generation. Unknown commands return help rather than becoming model instructions.
 
+<details>
+<summary>Implementation detail (core modules, session routing, design principles)</summary>
+
 ## Core Modules
 
 ```
@@ -271,6 +292,32 @@ Resolution strategy: in-process reuse → persisted resume → fresh create.
 - **Explicit sending** — preview and send a Web answer to QQ; Agent file sending and automatic file delivery remain disabled
 - **Question interaction** — supports `ask_user_question` with inline keyboard buttons (mutually exclusive) or numbered replies, one question at a time with timeout
 - **Approval confirmation** — supports `approval/request` to ask for user confirmation on critical actions via allow/deny buttons
+
+</details>
+
+## Known Limitations
+
+- **A send only confirms platform acceptance**: QQ returns an `accepted` state meaning the platform accepted it, not that the user received or read it; failed and unknown results are not auto-resent.
+- **Short passive-reply window**: 5 minutes for groups, 30 minutes for DMs; each message has a passive-reply count limit (default 4, one reserved). After the window or limit, proactive sends may be rejected.
+- **Final text only, no streaming**: QQ receives the turn's final answer text; streamed content stays in DSH. `streaming` is legacy-compat and ignored in this version.
+- **No tool traces or files**: tool calls/results show only in DSH; no agent file-send tool is registered (`qqbot_send_file` is unavailable at runtime) and tool-generated files are not delivered. `showToolResults` and `sendFile.sendPresentedFiles` are legacy-compat and ignored.
+- **Groups reply only on @ by default**: new groups have `requireMention=true`; non-@ group messages are at most background and never trigger a reply, and whether non-@ messages are even received depends on the QQ platform enabling full group-message events.
+- **Session rotation ≠ record retention**: the native session auto-rotates after 7 days or 1,000 QQ messages at a safe boundary (history kept); message records are kept indefinitely and only cleared by the manual "clear records" action (ids retained for dedupe).
+- **Tool capability is host-bounded**: MCP/network tools cannot be domain-restricted; memory_*, subagent/delegation tools are unavailable; in native mode execution cannot exceed granted sandbox scope. If the current native permission is outside the allowed set, tools are restricted.
+- **Media relies on local temp files**: downloads live in `QQBOT_DATA_DIR/media` (default `~/.dsh-qqbot/media`) and are pruned by `media.ttlHours` (default 24h); long-lived local paths can expire. Downloads are HTTPS-only with SSRF/size/timeout guards.
+- **QQ sessions may appear duplicated in the workspace list**: the plugin reuses native sessions and the host has no public filter, so this limitation remains.
+- **Access control is fail-closed**: DMs default to `allowlist` with an empty list = deny all; groups default to `open`.
+- **Some client copy is hard-coded Chinese**: the `qqbot` locale namespace covers only part of the strings; the rest is inline Chinese, not fully i18n'd.
+
+## Dev Note
+
+<details>
+
+- Bundle-shaped plugin (`dsh.bundle.patch → cordis.patch.yml`): install inserts one plugin row into the profile layer and never patches host source; credentials/config go to the profile `cordis.patch.yml` and take effect via HMR.
+- Loading source directly (`--patch cordis.dev.yml`) can't cross the `node_modules` boundary, so `getProfileDir()` is empty and credentials must come from env.
+- To verify: whether `vision.timeoutMs` actually takes effect (`callVision` uses exec.signal); `ensureVisionInputModal` edits the host `settings.yaml` to add image input to the vision model; SSRF guard resolves IPv4 only and does not block IPv6. Historical docs in `docs/scratch/` are one-off handoff/acceptance records, not authoritative.
+
+</details>
 
 ## Local Development
 
