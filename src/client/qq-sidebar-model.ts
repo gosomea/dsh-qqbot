@@ -55,7 +55,8 @@ export function sessionDateTitle(timestamp: number): string {
   return `会话 · ${new Date(timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
 }
 
-export function visibleQQSessions(peer: QQSidebarPeer, showAll: boolean): readonly QQSidebarSession[] { return showAll ? peer.historySessions : peer.historySessions.slice(0, 5); }
+/** 对齐原生 DSH 侧栏：peer 展开即列出其全部历史会话（不截断，靠侧栏滚动）。 */
+export function visibleQQSessions(peer: QQSidebarPeer): readonly QQSidebarSession[] { return peer.historySessions; }
 
 export function qqWorkspaceName(title: string | null | undefined, path: string | null | undefined, defaultWorkspaceName = '默认工作区'): string {
   const label = title?.trim();

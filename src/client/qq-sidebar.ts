@@ -51,7 +51,7 @@ export function QQSidebar({ store, actions, t, defaultWorkspaceName, wide, expan
           h(collapsed ? IconChevronRightOutlineRegular : IconChevronDownOutlineRegular, { size: 12 }), h('span', null, title), h('span', { className: 'imqq-count' }, scoped.length)),
         !collapsed ? scoped.length ? scoped.map((peer) => h(PeerRow, { key: peer.entry.key, peer, store, t,
           expanded: Boolean(sidebar.search.trim()) || sidebar.expandedPeers.includes(peer.entry.key),
-          showAll: sidebar.showAllPeers.includes(peer.entry.key), selectedSessionId: sidebar.selectedSessionId,
+          selectedSessionId: sidebar.selectedSessionId,
           onDialog: setDialog })) : h('p', { className: 'imqq-empty' }, state.loading && !state.directory ? '正在读取…' : sidebar.search ? '无匹配结果' : scope === 'group' ? '尚未发现群聊' : '尚未发现联系人') : null);
     })),
     h('footer', { className: 'imqq-footer' }, h('span', { role: 'status' }, state.runtime?.phase === 'ready' ? 'QQ 已连接' : state.runtime?.phase === 'unbound' ? '等待绑定' : state.runtime?.phase === 'failed' ? '连接失败' : 'QQ 连接状态待确认'),
@@ -59,13 +59,13 @@ export function QQSidebar({ store, actions, t, defaultWorkspaceName, wide, expan
     dialog ? h(SidebarEditDialog, { key: dialog.sessionId, target: dialog, store, actions, onClose: () => setDialog(null) }) : null);
 }
 
-function PeerRow({ peer, store, t, expanded, showAll, selectedSessionId, onDialog }: {
-  peer: QQSidebarPeer; store: QQSessionStore; t: QQTranslate; expanded: boolean; showAll: boolean; selectedSessionId: string | null; onDialog: (dialog: SidebarDialog) => void;
+function PeerRow({ peer, store, t, expanded, selectedSessionId, onDialog }: {
+  peer: QQSidebarPeer; store: QQSessionStore; t: QQTranslate; expanded: boolean; selectedSessionId: string | null; onDialog: (dialog: SidebarDialog) => void;
 }): ReactNode {
   const [menuOpen, setMenuOpen] = useState(false);
   const { entry, name, currentSession } = peer;
   const selected = currentSession !== null && currentSession.sessionId === selectedSessionId;
-  const sessions = visibleQQSessions(peer, showAll);
+  const sessions = visibleQQSessions(peer);
   const hasHistory = peer.historySessions.length > 0;
   // 只有存在历史会话时才显示展开箭头；仅一条当前会话时点整行即可，无需 chevron，避免与分组头的 chevron 混淆。
   const expandable = hasHistory;
@@ -93,9 +93,7 @@ function PeerRow({ peer, store, t, expanded, showAll, selectedSessionId, onDialo
         } })),
     expanded && (hasHistory || currentSession) ? h('div', { className: 'imqq-sessions', 'aria-label': `${name}的会话` },
       currentSession ? h(SessionRow, { key: currentSession.sessionId, session: currentSession, entry, store, t, selected: selectedSessionId === currentSession.sessionId, current: true, onDialog }) : null,
-      ...sessions.map((session) => h(SessionRow, { key: session.sessionId, session, entry, store, t, selected: selectedSessionId === session.sessionId, onDialog })),
-      showAll && peer.historySessions.length > 0 ? h('button', { type: 'button', className: 'imqq-more', 'aria-expanded': true, onClick: () => store.showAllSessions(entry.key) }, '收起历史') : null,
-      !showAll && peer.historySessions.length > sessions.length ? h('button', { type: 'button', className: 'imqq-more', 'aria-expanded': false, onClick: () => store.showAllSessions(entry.key) }, `查看更多历史 · 还有 ${peer.historySessions.length - sessions.length} 条`) : null) : null);
+      ...sessions.map((session) => h(SessionRow, { key: session.sessionId, session, entry, store, t, selected: selectedSessionId === session.sessionId, onDialog }))) : null);
 }
 
 function SessionRow({ session, entry, store, t, selected, current = false, onDialog }: {

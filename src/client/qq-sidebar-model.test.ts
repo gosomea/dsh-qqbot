@@ -22,8 +22,7 @@ describe('QQ sidebar peer and native Session projection', () => {
     if (!group) throw new Error('missing peer');
     expect(group.currentSession?.sessionId).toBe('current');
     expect(group.historySessions.map((session) => session.sessionId)).toEqual(['old-0', 'old-5', 'old-4', 'old-3', 'old-2', 'old-1']);
-    expect(visibleQQSessions(group, false)).toHaveLength(5);
-    expect(visibleQQSessions(group, true)).toHaveLength(6);
+    expect(visibleQQSessions(group)).toHaveLength(6); // 对齐原生：全部历史会话
     expect(group.historySessions[0]?.title).toBe('最近工作');
   });
   it('searches platform names, remarks, and native Session titles without renaming the peer', () => {
@@ -97,12 +96,11 @@ describe('independent QQ sidebar state', () => {
     const store = new QQSessionStore({ openSession });
     const entry = peer();
     store.accept({ conversations: [entry], tools: [], ownerIds: [] });
-    // openSession(历史) 会自动展开该 peer（写入 showAllPeers）；无需再手动 showAllSessions。
     store.setSidebarMode('qq'); store.openSession('old-0'); store.setSearch('工作'); store.toggleScope('c2c');
     const before = store.getSnapshot().sidebar;
     store.accept({ conversations: [{ ...entry, currentSessionId: 'new-current', alias: '改名' }], tools: [], ownerIds: [] });
     expect(store.getSnapshot().sidebar).toBe(before);
-    expect(store.getSnapshot().sidebar).toMatchObject({ sidebarMode: 'qq', selectedSessionId: 'old-0', expandedPeers: ['group'], showAllPeers: ['group'], search: '工作', collapsedScopes: ['c2c'] });
+    expect(store.getSnapshot().sidebar).toMatchObject({ sidebarMode: 'qq', selectedSessionId: 'old-0', expandedPeers: ['group'], search: '工作', collapsedScopes: ['c2c'] });
     expect(store.resumeSessionId()).toBe('old-0');
     // resumeTarget also resolves the conversation name so the welcome entry can show which chat it continues.
     expect(store.resumeTarget()).toMatchObject({ sessionId: 'old-0' });
@@ -112,7 +110,7 @@ describe('independent QQ sidebar state', () => {
   it('has no navigation or creation side effect for group expansion, searching, or a missing Session', () => {
     const openSession = vi.fn(); const store = new QQSessionStore({ openSession });
     store.accept({ conversations: [peer({ currentSessionId: null, sessions: [] })], tools: [], ownerIds: [] });
-    store.togglePeer('group'); store.toggleScope('group'); store.setSearch('讨论群'); store.showAllSessions('group');
+    store.togglePeer('group'); store.toggleScope('group'); store.setSearch('讨论群');
     expect(openSession).not.toHaveBeenCalled(); expect(store.resumeSessionId()).toBeNull(); expect(store.resumeTarget()).toBeNull();
   });
   it('reveals a selected older Session beyond the default five while leaving an unselected peer at five', () => {
@@ -120,9 +118,9 @@ describe('independent QQ sidebar state', () => {
     const entry = peer(); store.accept({ conversations: [entry], tools: [], ownerIds: [] });
     const projected = qqSidebarPeers([entry], {}, [], '')[0];
     if (!projected) throw new Error('missing peer');
-    expect(visibleQQSessions(projected, store.getSnapshot().sidebar.showAllPeers.includes(entry.key))).toHaveLength(5);
+    expect(visibleQQSessions(projected)).toHaveLength(6);
     store.openSession('old-0');
-    const visible = visibleQQSessions(projected, store.getSnapshot().sidebar.showAllPeers.includes(entry.key));
+    const visible = visibleQQSessions(projected);
     expect(visible.some((session) => session.sessionId === store.getSnapshot().sidebar.selectedSessionId)).toBe(true);
     expect(visible).toHaveLength(6);
   });
@@ -130,12 +128,12 @@ describe('independent QQ sidebar state', () => {
     const openSession = vi.fn(); const store = new QQSessionStore({ openSession });
     const entry = peer(); store.accept({ conversations: [entry], tools: [], ownerIds: [] });
     store.open(entry);
-    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'current', expandedPeers: [], showAllPeers: [] });
+    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'current', expandedPeers: [] });
     store.setSearch('does not match selected history'); store.toggleScope('group'); store.openSession('old-0');
-    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'old-0', expandedPeers: ['group'], showAllPeers: ['group'], collapsedScopes: [], search: '' });
+    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'old-0', expandedPeers: ['group'], collapsedScopes: [], search: '' });
     expect(openSession.mock.calls.map(([id]) => id)).toEqual(['current', 'old-0']);
     store.open(entry);
-    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'current', expandedPeers: ['group'], showAllPeers: ['group'] });
+    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'current', expandedPeers: ['group'] });
   });
   it('preserves a matching history search when its visible result opens and the native selection is observed', () => {
     const store = new QQSessionStore({ openSession: vi.fn() }); const entry = peer();
@@ -144,7 +142,7 @@ describe('independent QQ sidebar state', () => {
     const result = qqSidebarPeers([entry], summaries, [], store.getSnapshot().sidebar.search)[0]?.historySessions[0];
     if (!result) throw new Error('missing matching history result');
     store.openSession(result.sessionId, { preserveVisibleFilter: true });
-    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'old-0', search: '报告', expandedPeers: ['group'], showAllPeers: ['group'] });
+    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'old-0', search: '报告', expandedPeers: ['group'] });
     store.selectSession('old-0');
     expect(store.getSnapshot().sidebar.search).toBe('报告');
     expect(qqSidebarPeers([entry], summaries, [], store.getSnapshot().sidebar.search)[0]?.historySessions.map((session) => session.sessionId)).toEqual(['old-0']);
@@ -157,15 +155,6 @@ describe('independent QQ sidebar state', () => {
     store.openSession(resume);
     expect(store.getSnapshot().sidebar.search).toBe('报告');
     store.openSession('old-5');
-    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'old-5', search: '', expandedPeers: ['group'], showAllPeers: ['group'] });
-  });
-  it('toggles the full history open and closed for a peer', () => {
-    const store = new QQSessionStore({ openSession: vi.fn() });
-    const entry = peer(); store.accept({ conversations: [entry], tools: [], ownerIds: [] });
-    expect(store.getSnapshot().sidebar.showAllPeers).toEqual([]);
-    store.showAllSessions(entry.key);
-    expect(store.getSnapshot().sidebar.showAllPeers).toEqual(['group']);
-    store.showAllSessions(entry.key); // 再次点击 = 收起
-    expect(store.getSnapshot().sidebar.showAllPeers).toEqual([]);
+    expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'old-5', search: '', expandedPeers: ['group'] });
   });
 });

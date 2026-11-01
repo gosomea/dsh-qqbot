@@ -47,7 +47,7 @@ export function installQQSidebarNavigation({ store, layout, currentSession, navi
     pendingRestore = restore && store.getSnapshot().directory === null;
     showQQ();
     const id = restore ? store.resumeSessionId() : null;
-    if (id) store.openSession(id);
+    if (id) store.openSession(id, { revealHistory: false });
     else arm();
   };
   const openSettings = (): void => {
@@ -65,7 +65,7 @@ export function installQQSidebarNavigation({ store, layout, currentSession, navi
     if (pendingRestore && store.getSnapshot().directory) {
       pendingRestore = false;
       const id = store.resumeSessionId();
-      if (id && store.getSnapshot().sidebar.sidebarMode === 'qq') store.openSession(id);
+      if (id && store.getSnapshot().sidebar.sidebarMode === 'qq') store.openSession(id, { revealHistory: false });
     }
   };
   const stopStore = store.subscribe(syncSidebar);
@@ -87,7 +87,7 @@ export function installQQSidebarNavigation({ store, layout, currentSession, navi
     // The host replaces the current binding before revealing its Conversation.
     queueMicrotask(() => {
       if (disposed || currentSession.getSnapshot().key !== next || layout.panelInfo.getSnapshot().activePanelId !== null) return;
-      if (next && store.entry(next)) { store.selectSession(next); enter(false); }
+      if (next && store.entry(next)) { store.selectSession(next, { revealHistory: false }); enter(false); }
       else exit();
     });
   });

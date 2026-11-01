@@ -19,7 +19,7 @@ export interface QQOperationTarget {
   readonly kind: 'newSession'; readonly key: string; readonly name: string; readonly sessionId: string | null;
   readonly workspaceId: string | null; readonly policyVersion: number; readonly presetId: string | null;
 }
-interface QQSessionSelectionOptions { readonly preserveVisibleFilter?: boolean }
+interface QQSessionSelectionOptions { readonly preserveVisibleFilter?: boolean; /** 选中历史会话时是否自动展开该 peer 的全部历史（用户主动点击= true；恢复/程序选中= false）。 */ readonly revealHistory?: boolean }
 type QQOverlay = { readonly kind: 'drawer'; readonly target: QQDrawerTarget } | { readonly kind: 'answer'; readonly preview: QQAnswerPreview } | { readonly kind: 'operation'; readonly target: QQOperationTarget };
 export type QQScope = ConversationView['scope'];
 export interface QQSidebarState {
@@ -27,7 +27,6 @@ export interface QQSidebarState {
   readonly selectedSessionId: string | null;
   readonly expandedPeers: readonly string[];
   readonly collapsedScopes: readonly QQScope[];
-  readonly showAllPeers: readonly string[];
   readonly search: string;
 }
 export interface QQSessionState {
@@ -44,7 +43,7 @@ export interface QQSessionState {
 /** One directory subscription serves the directory, row decorations and Session actions. */
 export class QQSessionStore {
   private state: QQSessionState = { directory: null, runtime: null, loading: true, error: null, overlay: null, deliveryRevision: 0, deliveries: {},
-    sidebar: { sidebarMode: 'workspace', selectedSessionId: null, expandedPeers: [], collapsedScopes: [], showAllPeers: [], search: '' } };
+    sidebar: { sidebarMode: 'workspace', selectedSessionId: null, expandedPeers: [], collapsedScopes: [], search: '' } };
   private readonly listeners = new Set<() => void>();
   private readonly sessions = new Map<string, ConversationView>();
   private request = 0;
@@ -63,7 +62,6 @@ export class QQSessionStore {
       return {
         ...(Array.isArray(value.expandedPeers) ? { expandedPeers: value.expandedPeers.filter(x => typeof x === 'string') } : {}),
         ...(Array.isArray(value.collapsedScopes) ? { collapsedScopes: value.collapsedScopes.filter(x => x === 'group' || x === 'c2c') } : {}),
-        ...(Array.isArray(value.showAllPeers) ? { showAllPeers: value.showAllPeers.filter(x => typeof x === 'string') } : {}),
         ...(typeof value.selectedSessionId === 'string' || value.selectedSessionId === null ? { selectedSessionId: value.selectedSessionId } : {}),
       };
     } catch { return {}; }
@@ -71,7 +69,7 @@ export class QQSessionStore {
   private saveSidebar(): void {
     try {
       const s = this.state.sidebar;
-      globalThis.localStorage?.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify({ expandedPeers: s.expandedPeers, collapsedScopes: s.collapsedScopes, showAllPeers: s.showAllPeers, selectedSessionId: s.selectedSessionId }));
+      globalThis.localStorage?.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify({ expandedPeers: s.expandedPeers, collapsedScopes: s.collapsedScopes, selectedSessionId: s.selectedSessionId }));
     } catch { /* storage 不可用则忽略 */ }
   }
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
@@ -99,9 +97,10 @@ export class QQSessionStore {
     if (!entry) return;
     const sidebar = this.state.sidebar;
     const historical = sessionId !== entry.currentSessionId;
+    // 恢复/程序选中（revealHistory === false）不改写用户手动展开/收起的历史态。
+    const reveal = historical && options.revealHistory !== false;
     this.updateSidebar({ selectedSessionId: sessionId,
-      expandedPeers: historical && !sidebar.expandedPeers.includes(entry.key) ? [...sidebar.expandedPeers, entry.key] : sidebar.expandedPeers,
-      showAllPeers: historical && !sidebar.showAllPeers.includes(entry.key) ? [...sidebar.showAllPeers, entry.key] : sidebar.showAllPeers,
+      expandedPeers: reveal && !sidebar.expandedPeers.includes(entry.key) ? [...sidebar.expandedPeers, entry.key] : sidebar.expandedPeers,
       search: historical && sessionId !== sidebar.selectedSessionId && !options.preserveVisibleFilter ? '' : sidebar.search,
       collapsedScopes: sidebar.collapsedScopes.filter((scope) => scope !== entry.scope) });
   }
@@ -120,11 +119,6 @@ export class QQSessionStore {
   }
   togglePeer(key: string): void { this.updateSidebar({ expandedPeers: toggleValue(this.state.sidebar.expandedPeers, key) }); }
   toggleScope(scope: QQScope): void { this.updateSidebar({ collapsedScopes: toggleValue(this.state.sidebar.collapsedScopes, scope) }); }
-  /** 展开/收起该会话的完整历史（toggle）。 */
-  showAllSessions(key: string): void {
-    const has = this.state.sidebar.showAllPeers.includes(key);
-    this.updateSidebar({ showAllPeers: has ? this.state.sidebar.showAllPeers.filter(k => k !== key) : [...this.state.sidebar.showAllPeers, key] });
-  }
   setSearch(search: string): void { this.updateSidebar({ search }); }
   installNavigation(navigate: (sessionId: string) => void): () => void {
     this.navigate = navigate;
