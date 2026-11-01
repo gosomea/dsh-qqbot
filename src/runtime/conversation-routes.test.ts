@@ -171,13 +171,13 @@ describe('conversation admission through the real action route', () => {
 
   it.each([
     { name: 'explicit allowlist', allowed: ['preset-a', 'preset-b'], expected: ['preset-a', 'preset-b'] },
-    { name: 'empty allowlist', allowed: [], expected: ['standard'] },
-  ])('exposes only selectable presets for $name in the backend snapshot', ({ allowed, expected }) => {
+    // 空 allowlist = 不限：selectablePresets 为空数组，客户端视为全部可选。
+    { name: 'empty allowlist (unrestricted)', allowed: [], expected: [] },
+  ])('exposes selectable presets for $name in the backend snapshot', ({ allowed, expected }) => {
     const f = fixture(); const entry = f.service.requireEntry(f.key);
     f.service.store.updatePolicy(f.key, entry.policy.version, { ...entry.policy, allowedPresets: allowed });
     const view = f.service.snapshot().conversations.find(item => item.key === f.key);
     expect(view?.selectablePresets).toEqual(expected);
-    expect(view?.selectablePresets).toEqual([...f.service.allowedSelections(entry.scope, entry.peerId, 'preset')]);
   });
 
   it('fails closed without a profile when global access must be expanded', async () => {

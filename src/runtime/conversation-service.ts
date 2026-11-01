@@ -89,9 +89,9 @@ export class ConversationService {
     this.store = new ConversationStore(dataDir, config.appId, { defaultPolicy: () => {
       const policy = defaultPolicy('chat', resolveAgentCwd(config.cwd));
       policy.requireMention = config.requireMention;
-      const route = manager.getDefaultModel();
-      policy.allowedModels = [`${route.provider}/${route.model}`];
-      policy.allowedPresets = [manager.getDefaultPreset?.() || 'standard'];
+      // 不限制模型/预设：空数组表示"不限"，会话设置里用户可自由选择。
+      policy.allowedModels = [];
+      policy.allowedPresets = [];
       return policy;
     }, defaultSettings: () => ({ ...defaultQQAgentSettings(), preset: config.preset?.trim() || '', model: config.provider && config.model ? { provider: config.provider, model: config.model } : null, cwd: config.cwd || '', promptGroup: config.groupPrompt || '', promptDirect: config.directPrompt || '' }),
       // Keep model === null as "inherit host default"; the default reasoning effort rides on settings.reasoningEffort.
@@ -376,7 +376,8 @@ export class ConversationService {
     this.assertCommandAuthority(scope, peerId);
     // Native conversations follow the selected Agent; only restricted (custom-tool) policies carry an allowlist ceiling.
     if (this.entry(scope, peerId).policy.nativeTools !== false) return;
-    if (!this.allowedSelections(scope, peerId, kind).includes(value)) throw new Error(`该会话未授权${kind === 'model' ? '模型' : '预设'}：${value}，请由所有者在对话设置中配置。`);
+    // 不限（allowed 为空）时放行任意；受限时按列表校验。
+    if (!this.selectionUnrestricted(scope, peerId, kind) && !this.allowedSelections(scope, peerId, kind).includes(value)) throw new Error(`该会话未授权${kind === 'model' ? '模型' : '预设'}：${value}，请由所有者在对话设置中配置。`);
   }
   allowedSelections(scope: ChatScope, peerId: string, kind: 'model' | 'preset'): readonly string[] {
     const policy = this.entry(scope, peerId).policy;
@@ -384,6 +385,11 @@ export class ConversationService {
     if (allowed.length) return allowed;
     const fallback = kind === 'model' ? this.manager.getDefaultModel() : undefined;
     return [fallback ? `${fallback.provider}/${fallback.model}` : this.manager.getDefaultPreset?.() || this.config.preset || 'standard'];
+  }
+  /** 该会话的模型/预设是否不限（allowed 为空 = 无上限，用户可自由选择）。 */
+  selectionUnrestricted(scope: ChatScope, peerId: string, kind: 'model' | 'preset'): boolean {
+    const policy = this.entry(scope, peerId).policy;
+    return (kind === 'model' ? policy.allowedModels : policy.allowedPresets).length === 0;
   }
   attach(record: SessionRecord, workspaceId?: string, presetId?: string): void {
     const entry = this.ensure(record.scope, record.peerId, record.senderId);
@@ -450,7 +456,7 @@ export class ConversationService {
         permissionConflict: permission && !(record ? this.permissionAllowed(record) : !!permissionSandbox(sandbox ?? '')) ? `当前原生权限 ${permission} 不在本对话允许范围内；工具已限制，请显式选择获准权限。` : null,
         effectiveRestriction: { toolMode: entry.policy.toolMode ?? 'restricted', permission, sandbox },
         currentWorkspace: workspace ? { id: workspace.id, title: workspace.title, path: workspace.path } : null,
-        selectablePresets: [...this.allowedSelections(entry.scope, entry.peerId, 'preset')],
+        selectablePresets: [...this.entry(entry.scope, entry.peerId).policy.allowedPresets],
         passiveReply: { expiresAt: replySources.find(source => source.expiresAt > Date.now())?.expiresAt ?? replySources[0]?.expiresAt ?? null },
         currentPreset: status.preset ?? null, nextPreset: status.nextPreset ?? null, deliveryState: this.store.deliveries(entry.key)[0]?.state ?? null };
     }) };

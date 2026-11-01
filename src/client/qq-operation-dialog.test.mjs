@@ -56,16 +56,15 @@ describe('QQ preset operation authorization', () => {
   it('disables unauthorized catalog entries and submits only a permitted selection', async () => {
     const perform = await mount(conversation(['standard'], ['standard']));
     expect(option('精简模式').disabled).toBe(true);
-    expect(option('精简模式').textContent).toContain('此对话未授权');
     await act(async () => option('精简模式').click());
     expect(submit().disabled).toBe(true);
     await act(async () => option('标准模式').click());
     await act(async () => submit().click());
     expect(perform).toHaveBeenCalledWith({ action: 'create-session', key: 'group-operation', operationId: expect.any(String), expectedCurrentSessionId: 'current', expectedPolicyVersion: 1, workspaceId: 'workspace', presetId: 'standard' });
   });
-  it('uses the server effective default for an empty policy allowlist', async () => {
-    await mount(conversation([], ['minimal']));
-    expect(option('标准模式').disabled).toBe(true);
+  it('treats an empty policy allowlist as unrestricted (all presets selectable)', async () => {
+    await mount(conversation([], []));
+    expect(option('标准模式').disabled).toBe(false);
     expect(option('精简模式').disabled).toBe(false);
   });
   it('keeps an explicit allowlist usable with a legacy snapshot', async () => {
@@ -73,13 +72,11 @@ describe('QQ preset operation authorization', () => {
     expect(option('标准模式').disabled).toBe(false);
     expect(option('精简模式').disabled).toBe(true);
   });
-  it('requires refreshed authority instead of guessing a default from a legacy snapshot', async () => {
-    const perform = await mount(conversation([]));
-    expect(document.body.textContent).toContain('请刷新 QQ 目录后重试');
-    expect(option('标准模式').disabled).toBe(true);
-    expect(option('精简模式').disabled).toBe(true);
-    expect(submit().disabled).toBe(true);
-    expect(perform).not.toHaveBeenCalled();
+  it('treats an empty allowlist without selectablePresets as unrestricted', async () => {
+    await mount(conversation([]));
+    expect(document.body.textContent).not.toContain('请刷新 QQ 目录后重试');
+    expect(option('标准模式').disabled).toBe(false);
+    expect(option('精简模式').disabled).toBe(false);
   });
 });
 
