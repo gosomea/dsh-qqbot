@@ -2,7 +2,10 @@ src/
 dev.ts
 cordis.dev.yml
 tsconfig.json
-docs/
+docs/*
+!docs/native-sessions.md
+!docs/native-sessions.en.md
+!docs/settings-and-message-records.md
 .env
 .env.example
 .dsh-sessions/
@@ -16,3 +19,25 @@ TESTING.md
 .agents/
 .codex/
 .claude/
+
+# Local runtime verification evidence is not installation material.
+
+# Build metadata, source maps and private verification tooling are not runtime entries.
+**/*.map
+**/__pycache__/
+**/*.pyc
+.orange-ci.yml
+pnpm-workspace.yaml
+tsconfig.client.json
+tsdown.client.config.ts
+vitest.config.*
+scripts/link-native-host.mjs
+scripts/prepare-test-pkg.js
+scripts/check-stock-host.mjs
+scripts/link-stock-host.mjs
+scripts/native-*.py
+.cache/
+
+scripts/workbench-*.py
+
+.audit/

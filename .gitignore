@@ -1,6 +1,9 @@
 node_modules/
 dist/
-docs/
+docs/*
+!docs/native-sessions.md
+!docs/native-sessions.en.md
+!docs/settings-and-message-records.md
 .env
 .dsh-sessions/
 *.tsbuildinfo
@@ -12,3 +15,7 @@ lib/**/*.map
 
 # Python helpers used by the local protocol tests
 tests/e2e/__pycache__/
+# Retired custom-Host probe; depends on local, untracked workbench tooling.
+tests/e2e/memory-removal-check.py
+
+.audit/

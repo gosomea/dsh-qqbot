@@ -6,6 +6,7 @@
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { PLUGIN_HOME } from '../shared/dirs.ts';
 import type { ModelRoute } from './types.ts';
 
@@ -103,7 +104,13 @@ export class PrefsStore {
       if (data.overrides && typeof data.overrides === 'object') {
         for (const [key, route] of Object.entries(data.overrides)) {
           if (route.provider && route.model) {
-            this.overrides.set(key, { provider: route.provider, model: route.model });
+            this.overrides.set(key, {
+              provider: route.provider,
+              model: route.model,
+              ...typeof route.reasoningEffort === 'string' && route.reasoningEffort !== ''
+                ? { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }
+                : {},
+            });
           }
         }
       }

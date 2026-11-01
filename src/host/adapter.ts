@@ -2,10 +2,12 @@
  * 宿主 API 适配层 — 收口所有版本漂移点，一次探测按需复用。
  *
  * 宿主新旧版本 API 形态不同（本插件踩过的漂移：events → snapshotEvents、
- * presets.serviceFor 实例方法 → serviceForAgent 模块函数、./fork 子路径导出）。
+ * presets.serviceFor 实例方法 → serviceForAgent 模块函数）。
  * 调用方只依赖本模块的稳定签名，不再直接假设宿主形态。
  */
 import type { Context } from '@deepseek-ai/cordis';
+import { SessionId } from '@deepseek-ai/dsh-session';
+import type { DshAgent } from '../session/types.ts';
 
 /** 日志最小接口 */
 export interface AdapterLogger {
@@ -20,8 +22,8 @@ export interface HostAdapter {
   serviceFor(agent: { ctx: unknown }, name: string): Promise<unknown | undefined>;
   /** 全局服务读取（未注册返回 undefined，不抛） */
   globalService(name: string): unknown | undefined;
-  /** 官方 fork seed 构造；旧宿主无导出时返回 undefined */
-  buildForkSeed(events: readonly unknown[], boundary: number): Promise<readonly unknown[] | undefined>;
+  /** 通过原生控制器合并并发恢复，避免与默认会话页创建不同 Agent。 */
+  resolveAgent(sessionId: string): Promise<DshAgent | undefined>;
   /** 探测结果摘要（启动契约检查用） */
   readonly capabilities: string[];
 }
@@ -71,8 +73,7 @@ export function createHostAdapter(ctx: Context, logger?: AdapterLogger): HostAda
     async serviceFor(agent, name) {
       if (resolveFn) {
         try {
-          const found = resolveFn(agent, name);
-          if (found) return found;
+          return resolveFn(agent, name);
         } catch { /* 宿主实现差异，走模块函数 */ }
       }
       const mod = await importModule('@deepseek-ai/dsh-agent-presets', logger);
@@ -87,22 +88,21 @@ export function createHostAdapter(ctx: Context, logger?: AdapterLogger): HostAda
       }
     },
 
+    async resolveAgent(sessionId) {
+      const controller = safeGet(ctx, 'sessionController') as {
+        resolveAgent?(id: SessionId): Promise<{ agent: DshAgent } | { error: Error & { code?: string } }>;
+      } | undefined;
+      if (!controller?.resolveAgent) throw new Error('当前宿主缺少原生会话恢复接口，原会话保持不变。');
+      const result = await controller.resolveAgent(SessionId(sessionId));
+      if ('agent' in result) return result.agent;
+      if (result.error.code === 'session/not-found') return undefined;
+      throw result.error;
+    },
+
     globalService(name) {
       return safeGet(ctx, name);
     },
 
-    async buildForkSeed(events, boundary) {
-      const mod = await importModule('@deepseek-ai/dsh-session/fork', logger);
-      const fn = mod?.buildForkSeed as
-        | ((events: readonly unknown[], boundary: number) => readonly unknown[])
-        | undefined;
-      if (typeof fn !== 'function') return undefined;
-      try {
-        return fn(events, boundary);
-      } catch {
-        return undefined;
-      }
-    },
   };
 }
 

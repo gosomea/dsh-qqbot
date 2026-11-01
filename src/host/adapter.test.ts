@@ -52,6 +52,11 @@ describe('host adapter', () => {
     expect(await adapter.serviceFor({ ctx: {} }, 'compaction')).toBe(compaction);
   });
 
+  it('keeps a missing service scoped to the current preset', async () => {
+    const adapter = createHostAdapter(makeCtx({ agentPresets: { serviceFor: () => undefined } }));
+    expect(await adapter.serviceFor({ ctx: {} }, 'compaction')).toBeUndefined();
+  });
+
   it('globalService：未注册返回 undefined（不抛）', () => {
     const adapter = createHostAdapter(makeCtx({}));
     expect(adapter.globalService('compaction')).toBeUndefined();
@@ -63,8 +68,29 @@ describe('host adapter', () => {
     expect(adapter.globalService('compaction')).toBe(compaction);
   });
 
-  it('buildForkSeed：模块不可解析时返回 undefined（不抛）', async () => {
-    const adapter = createHostAdapter(makeCtx({}));
-    expect(await adapter.buildForkSeed([{ seq: 0 }], 0)).toBeUndefined();
+  it('uses the public controller Agent shared with the native Session page', async () => {
+    const agent = { id: 'session-shared' };
+    const resolveAgent = vi.fn(async () => ({ agent }));
+    const adapter = createHostAdapter(makeCtx({ sessionController: { resolveAgent } }));
+    expect(await adapter.resolveAgent('session-shared')).toBe(agent);
+    expect(resolveAgent).toHaveBeenCalledExactlyOnceWith('session-shared');
   });
+
+  it('allows new Session creation only for the native not-found result', async () => {
+    const error = Object.assign(new Error('missing'), { code: 'session/not-found' });
+    const adapter = createHostAdapter(makeCtx({ sessionController: { resolveAgent: async () => ({ error }) } }));
+    expect(await adapter.resolveAgent('session-missing')).toBeUndefined();
+  });
+
+  it.each(['session/writer-held', 'gateway/internal'])('preserves native %s failures instead of creating a replacement', async code => {
+    const error = Object.assign(new Error('native resolution failed'), { code });
+    const adapter = createHostAdapter(makeCtx({ sessionController: { resolveAgent: async () => ({ error }) } }));
+    await expect(adapter.resolveAgent('session-stored')).rejects.toBe(error);
+  });
+
+  it('fails without a public controller instead of resuming through a second registry path', async () => {
+    const adapter = createHostAdapter(makeCtx({}));
+    await expect(adapter.resolveAgent('session-stored')).rejects.toThrow('原生会话恢复接口');
+  });
+
 });

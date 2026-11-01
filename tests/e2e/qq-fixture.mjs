@@ -62,13 +62,15 @@ export async function createQQFixture(options = {}) {
   function message(ws, selected) {
     if (ws.readyState !== WebSocket.OPEN || !authenticated.has(ws)) return;
     const allowed = selected.identity === 'allowed';
-    const envelope = { id: `local-fixture-message-${state.receivedMessages + 1}`, content: selected.content, timestamp: new Date().toISOString() };
+    const senderAllowed = (selected.senderIdentity ?? selected.identity) === 'allowed';
+    const envelope = { id: selected.messageId ?? `local-fixture-message-${state.startedAt}-${state.receivedMessages + 1}`, content: selected.content, timestamp: new Date().toISOString(),
+      ...(selected.full ? { mentions: selected.mention ? [{ id: DUMMY_APP_ID, member_openid: DUMMY_APP_ID, bot: true }] : [] } : {}) };
     if (selected.scope === 'c2c') {
       dispatch(ws, 'C2C_MESSAGE_CREATE', { ...envelope, author: { user_openid: `local-fixture-${allowed ? 'allowed' : 'denied'}-user` } });
     } else {
-      dispatch(ws, selected.mention ? 'GROUP_AT_MESSAGE_CREATE' : 'GROUP_MESSAGE_CREATE', {
+      dispatch(ws, selected.mention && !selected.full ? 'GROUP_AT_MESSAGE_CREATE' : 'GROUP_MESSAGE_CREATE', {
         ...envelope, group_openid: `local-fixture-${allowed ? 'allowed' : 'denied'}-group`,
-        author: { member_openid: `local-fixture-${allowed ? 'allowed' : 'denied'}-user` },
+        author: { member_openid: `local-fixture-${senderAllowed ? 'allowed' : 'denied'}-user` },
       });
     }
     state.receivedMessages += 1;
@@ -82,6 +84,16 @@ export async function createQQFixture(options = {}) {
       const path = new URL(req.url ?? '/', origin).pathname;
       if (req.method === 'GET' && path === '/__fixture/status') return json(res, 200, snapshot());
       if (req.method === 'GET' && path === '/__fixture/observations') return json(res, 200, { commands: [...commandLog], outbound: [...outboundLog] });
+      if (req.method === 'POST' && path === '/__fixture/conversation' && options.allowModelRequests === true) {
+        const data = await readJson(req);
+        if (!['c2c', 'group'].includes(data.scope) || !['allowed', 'denied'].includes(data.identity)
+          || (data.senderIdentity !== undefined && !['allowed', 'denied'].includes(data.senderIdentity))
+          || typeof data.content !== 'string' || data.content.length > 10000
+          || (data.messageId !== undefined && (typeof data.messageId !== 'string' || !/^local-fixture-[a-zA-Z0-9_-]+$/.test(data.messageId)))) return json(res, 400, { message: 'Invalid synthetic conversation message' });
+        const selected = { scope: data.scope, identity: data.identity, senderIdentity: data.senderIdentity, content: data.content, mention: data.mention === true, full: data.full === true, messageId: data.messageId, command: 'conversation' };
+        for (const ws of wss.clients) message(ws, selected);
+        return json(res, 200, snapshot());
+      }
       if (req.method === 'POST' && path === '/__fixture/message') {
         const selected = parseFixtureMessage(await readJson(req), commands, options.allowModelRequests === true);
         for (const ws of wss.clients) message(ws, selected);

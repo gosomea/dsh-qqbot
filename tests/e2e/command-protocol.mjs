@@ -44,17 +44,21 @@ export function createFixtureCommands(config = {}) {
 
 export function parseFixtureMessage(value = {}, commands = createFixtureCommands(), allowModelRequests = false) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid fixture message');
-  const allowedKeys = new Set(['scope', 'identity', 'mention', 'command']);
+  const allowedKeys = new Set(['scope', 'identity', 'mention', 'command', 'text', 'full', 'senderIdentity', 'messageId']);
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) throw new Error('Unsupported fixture message option');
   const { scope = 'group', identity = 'denied', command = 'help' } = value;
   if (!['c2c', 'group'].includes(scope)) throw new Error('Unsupported fixture scope');
   if (!['allowed', 'denied'].includes(identity)) throw new Error('Unsupported fixture identity');
   if (value.mention !== undefined && typeof value.mention !== 'boolean') throw new Error('Invalid fixture mention flag');
+  if (value.text !== undefined && (!allowModelRequests || typeof value.text !== 'string' || value.text.length > 16000)) throw new Error('Custom fixture messages require model-test authorization');
+  if (value.full !== undefined && typeof value.full !== 'boolean') throw new Error('Invalid full-event flag');
+  if (value.senderIdentity !== undefined && !['allowed', 'denied'].includes(value.senderIdentity)) throw new Error('Invalid sender identity');
+  if (value.messageId !== undefined && (typeof value.messageId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(value.messageId))) throw new Error('Invalid fixture message ID');
   if (typeof command !== 'string' || !Object.hasOwn(commands, command)) throw new Error('Unsupported fixture command');
   if (['smoke', 'compact'].includes(command) && !allowModelRequests) {
     throw new Error('Fixture model requests are disabled');
   }
-  return { scope, identity, command, mention: value.mention !== false, content: commands[command] };
+  return { scope, identity, command, mention: value.mention !== false, content: value.text ?? commands[command], full: value.full === true, senderIdentity: value.senderIdentity, messageId: value.messageId };
 }
 
 export function isFixtureOutboundPath(path) {
