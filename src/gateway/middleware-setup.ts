@@ -20,7 +20,7 @@ import {
 import type { ImQQBotConfig } from '../config.ts';
 import type { SessionManager } from '../session/index.ts';
 import type { Logger } from '../types.ts';
-import { buildCommandList, buildClaimKeyboard } from '../commands/index.ts';
+import { buildCommandList } from '../commands/index.ts';
 import { attachmentProcessor } from '../middleware/attachment.ts';
 import { questionAnswer } from '../middleware/question-answer.ts';
 import { conversationGate, conversationDiscovery } from './conversation-gate.ts';
@@ -100,10 +100,6 @@ export function setupMiddlewares(
     const content = ctx.message.content.trim();
     if (service && content.length > 0 && content.length <= 32 && service.isActivePairCode(content)) {
       const result = service.beginClaimFromMessage(ctx.replyTarget.scope, ctx.replyTarget.targetId, content, ctx.message.senderId, ctx.message.senderName);
-      if (result.nonce !== undefined) {
-        await ctx.bot.sendMarkdown(ctx.replyTarget, result.message, { keyboard: buildClaimKeyboard(result.nonce) });
-        ctx.stop('claim-pending'); return;
-      }
       await ctx.bot.sendText(ctx.replyTarget, result.message);
       ctx.stop('claim-result'); return;
     }

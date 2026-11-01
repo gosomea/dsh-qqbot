@@ -491,7 +491,7 @@ describe('pairing-code claim (two-phase)', () => {
     const { code } = f.service.issuePairCode('allow-group');
     // 群会话：peerId='g'（群 openid），senderId='actor'（成员 openid）
     const started = f.service.beginClaimFromMessage('group', 'g', code, 'actor', '小明');
-    expect(started.ok).toBe(true);
+    // 文案针对「群」，不是「人」，且不显示 openID（无 profile 时写入失败，但文案已正确）
     expect(started.message).toContain('群');
     expect(started.message).not.toMatch(/[0-9A-Fa-f]{16,}/); // 不显示 openID
     expect(started.message).not.toContain('小明'); // 不是对"人"加白

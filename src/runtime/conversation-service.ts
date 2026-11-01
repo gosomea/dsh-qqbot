@@ -246,7 +246,7 @@ export class ConversationService {
   isActivePairCode(text: string): boolean { return this.pairing.hasActiveCode(text); }
 
   /** 由 QQ 侧发起认领（/claim 命令或裸 token 共用）：解析 actor + startClaim。 */
-  beginClaimFromMessage(scope: ChatScope, peerId: string, code: string, senderId: string, senderName?: string): { ok: boolean; message: string; nonce?: string } {
+  beginClaimFromMessage(scope: ChatScope, peerId: string, code: string, senderId: string, senderName?: string): { ok: boolean; message: string } {
     const entry = this.entry(scope, peerId);
     const purpose = this.pairing.peekPurpose(code);
     // 群白名单是对「群」加白：身份用群 openID（peerId），昵称用群名；其余用发送者 openID。
@@ -259,8 +259,13 @@ export class ConversationService {
       scope: scope === 'group' ? 'group' : 'c2c',
       sceneName: scope === 'group' ? (entry.name || entry.alias || '本群') : (entry.alias || entry.name || '私聊'),
     };
-    const result = this.startClaim(code, actor);
-    return { ok: result.ok, message: result.message, ...(result.nonce === undefined ? {} : { nonce: result.nonce }) };
+    // 发码即加入：核销码后直接写入名单（无需再点按钮确认）。
+    const consumed = this.pairing.consume(code);
+    if (!consumed.ok) {
+      return { ok: false, message: consumed.reason === 'expired' ? '❌ 配对码已过期，请在网页重新生成。' : '❌ 配对码无效或已被使用，请核对后在网页重新生成。' };
+    }
+    const applied = this.applyMember(consumed.purpose, actor.openid, actor.nickname, actor.scope === 'group' ? 'group' : 'c2c', actor.sceneName);
+    return { ok: applied.ok, message: applied.message };
   }
 
   startClaim(rawCode: string, actor: PendingActor): { ok: boolean; message: string; nonce?: string; purpose?: PairPurpose } {

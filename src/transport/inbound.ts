@@ -149,7 +149,8 @@ async function executeInbound(ctx: MiddlewareContext, manager: SessionManager, _
   const dynamicContext = buildDynamicCtx(msg, mwState);
   // 来源/@/发送者/时间已移入 turn-meta runtime context；正文只保留 [媒体路径]+[引用/背景]+[用户正文]。
   const bodyWithMedia = dynamicContext ? `${dynamicContext}${agentBody}` : agentBody;
-  const blocks = assembleUserBlocks({ body: bodyWithMedia, background: background?.text });
+  // 不再把群聊背景塞进 user 正文（气泡里会显示一长串 [来源消息: …] 噪声）；只显示用户真实内容。
+  const blocks = assembleUserBlocks({ body: bodyWithMedia });
   const content: ContentBlock[] = blocks.map((text) => ({ type: 'text' as const, text }));
   const source = { kind: 'user' as const, qq: { senderId: msg.senderId, senderName, messageId: msg.messageId, conversationKey: entry?.key ?? record.sessionKey, contextPartCount: content.length, ...(background ? {backgroundCursor: background.cursor, backgroundMessageIds: background.messageIds} : {}) } };
   const message = createUserMessage({ content, source });
