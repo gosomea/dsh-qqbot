@@ -23,7 +23,13 @@ function usePairStatus(active: boolean): { status: PairStatusWire | null; error:
   useEffect(() => {
     if (!active) return;
     let stopped = false;
-    const load = (): void => { void fetchJson<PairStatusWire>(PAIR_STATUS_PATH, { cache: 'no-store' }).then((s) => { if (!stopped) { setStatus(s); setError(null); } }).catch((c: unknown) => { if (!stopped) setError(c instanceof Error ? c.message : '读取认领状态失败'); }); };
+    const load = (): void => { void fetchJson<PairStatusWire>(PAIR_STATUS_PATH, { cache: 'no-store' }).then((s) => { if (!stopped) { setStatus(s); setError(null); } }).catch((c: unknown) => {
+      if (stopped) return;
+      const msg = c instanceof Error ? c.message : '';
+      // 未绑定态该路由未注册（404）：当作"暂无"，不显示红色错误。
+      if (/404|未绑定|not found/i.test(msg)) { setStatus({ challenges: [], owners: [], allowC2c: [], allowGroup: [] }); setError(null); return; }
+      setError(msg || '读取认领状态失败');
+    }); };
     load();
     const timer = setInterval(load, POLL_MS);
     return () => { stopped = true; clearInterval(timer); };
@@ -32,10 +38,12 @@ function usePairStatus(active: boolean): { status: PairStatusWire | null; error:
 }
 
 /** 单个用途的认领面板：生成码 / 展示进行中的码 / 已认领成员列表（可撤销）。 */
-export function PairClaimPanel({ purpose, title, hint }: {
-  purpose: PairPurpose; title: string; hint?: string;
+export function PairClaimPanel({ purpose, title, hint, enabled = true }: {
+  purpose: PairPurpose; title: string; hint?: string; enabled?: boolean;
 }): ReactNode {
-  const { status, error, reload } = usePairStatus(true);
+  const { status, error, reload } = usePairStatus(enabled);
+  if (!enabled) return h('div', { className: 'imqc-pair' }, h('div', { className: 'imqc-inline' }, h('strong', null, title)),
+    h('p', { className: 'imqc-hint' }, '先完成 QQ 机器人绑定，才能配置认领。'));
   const members: ClaimedMember[] = status === null ? [] : purpose === 'owner' ? status.owners : purpose === 'allow-group' ? status.allowGroup : status.allowC2c;
   const [code, setCode] = useState<{ code: string; expiresAt: number } | null>(null);
   const [busy, setBusy] = useState(false);

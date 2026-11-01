@@ -50,7 +50,7 @@ function QQBotSettingsSection({ selectorSource, store, t }: { selectorSource: Se
       createElement('p', { className: 'imqb-cardHint' }, t('account.hint')),
       createElement(BindPanelBody, { state, gone, error, recheck }),
       createElement(ConfigPanel, { bindPhase: state?.phase, selectorSource, t }),
-      createElement(QQAccountOwners, { store, t })),
+      createElement(QQAccountOwners, { store, t, bound: state?.phase === 'bound' })),
     createElement('section', { className: 'imqb-card', 'aria-label': '新对话默认值' },
       createElement(QQDefaultsSettings, { store, selectorSource, t })),
   );

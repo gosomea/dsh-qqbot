@@ -126,7 +126,11 @@ export class QQSessionStore {
         if (!Array.isArray(directory.conversations) || !Array.isArray(directory.tools) || !Array.isArray(directory.ownerIds)) throw new Error('会话目录返回格式无效');
         if (!controller.signal.aborted && request === this.request) { this.accept(directory); if (runtime) this.update({ runtime }); }
       } catch (cause) {
-        if (!controller.signal.aborted && request === this.request) this.update({ loading: false, error: cause instanceof Error ? cause.message : '无法读取 QQ 会话' });
+        if (controller.signal.aborted || request !== this.request) return;
+        const message = cause instanceof Error ? cause.message : '无法读取 QQ 会话';
+        // 未绑定态该路由未注册（HTTP 404）：当作"暂无对话"，不显示红色错误。
+        if (/404/.test(message)) { this.accept({ conversations: [], tools: [], ownerIds: [] }); return; }
+        this.update({ loading: false, error: message });
       }
     };
     this.refreshDirectory = () => { void read(); };
