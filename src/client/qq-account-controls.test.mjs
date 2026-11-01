@@ -11,7 +11,7 @@ describe('QQ account controls', () => {
     const store = new QQSessionStore({ openSession: () => {} });
     const markup = renderToStaticMarkup(h(QQAccountOwners, { store }));
     expect(markup).toContain('斜杠命令超管');
-    expect(markup).toContain('在 QQ 认领');
+    expect(markup).toContain('添加');
     expect(markup).toContain('/claim');
     expect(markup).not.toContain('每行一个'); // 旧的 openid 手填 textarea 已移除
   });

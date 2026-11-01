@@ -5,10 +5,10 @@
  * 本组件只负责 Web 端的码展示与已认领列表；真正的 openid 绑定在服务端完成。
  */
 import { createElement as h, useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives';
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives';
 import { fetchJson } from './http.ts';
 import {
-  PAIR_ISSUE_PATH, PAIR_REVOKE_PATH, PAIR_STATUS_PATH, openidTail,
+  PAIR_ISSUE_PATH, PAIR_MANUAL_PATH, PAIR_REVOKE_PATH, PAIR_STATUS_PATH, openidTail,
   type ClaimedMember, type PairPurpose, type PairStatusWire,
 } from '../shared/pairing-protocol.ts';
 
@@ -40,6 +40,7 @@ export function PairClaimPanel({ purpose, title, hint }: {
   const [code, setCode] = useState<{ code: string; expiresAt: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [manualOpenid, setManualOpenid] = useState('');
 
   // 轮询到"该码已认领"（challenges 里消失且成员新增）时提示。
   useEffect(() => {
@@ -64,14 +65,25 @@ export function PairClaimPanel({ purpose, title, hint }: {
       .finally(() => setBusy(false));
   };
 
+  const addManual = (): void => {
+    if (busy || !manualOpenid.trim()) return;
+    setBusy(true); setMsg(null);
+    void fetchJson(PAIR_MANUAL_PATH, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ purpose, openid: manualOpenid.trim() }) })
+      .then(() => { setManualOpenid(''); setMsg('已添加 ✔'); reload(); })
+      .catch((c: unknown) => setMsg(c instanceof Error ? c.message : '添加失败'))
+      .finally(() => setBusy(false));
+  };
   const secs = code ? Math.max(0, Math.round((code.expiresAt - Date.now()) / 1000)) : 0;
   return h('div', { className: 'imqc-pair' },
-    h('div', { className: 'imqc-inline' }, h('strong', null, title), h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: issue }, code ? '重新生成' : '在 QQ 认领…')),
+    h('div', { className: 'imqc-inline' }, h('strong', null, title), h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: issue }, code ? '重新出码' : '添加…')),
     hint ? h('p', { className: 'imqc-hint' }, hint) : null,
     code ? h('div', { className: 'imqc-pairCode' },
-      h('span', { className: 'imqc-hint' }, '在 QQ 给机器人发送：'),
+      h('span', { className: 'imqc-hint' }, '在 QQ 给机器人发送这条消息：'),
       h('code', null, `/claim ${code.code}`),
-      h('span', { className: 'imqc-hint' }, `（${secs}s 内有效，认领成功后自动消失）`)) : null,
+      h('span', { className: 'imqc-hint' }, `（${secs}s 内有效；对方发送后会自动匹配昵称/openID，并让他点“确认”加入）`)) : null,
+    h('div', { className: 'imqc-inline imqc-pairManual' },
+      h(Input, { value: manualOpenid, disabled: busy, placeholder: '或直接输入 openID 添加', 'aria-label': `${title} openID`, onChange: (e: { currentTarget: { value: string } }) => setManualOpenid(e.currentTarget.value) }),
+      h(Button, { variant: 'outline', size: 'sm', disabled: busy || manualOpenid.trim() === '', onClick: addManual }, '添加')),
     msg ? h('p', { className: 'imqc-hint', role: 'status' }, msg) : null,
     error ? h('p', { className: 'imqc-error', role: 'alert' }, error) : null,
     members.length === 0

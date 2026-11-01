@@ -37,6 +37,7 @@ import { defaultQQAgentSettings, validateQQAgentSettings, type QQAgentSettings }
 import { permissionSandbox } from '../shared/policy-settings.ts';
 import { PairingService } from './pairing-service.ts';
 import { openidTail, type ClaimedMember, type PairPurpose, type PairStatusWire } from '../shared/pairing-protocol.ts';
+import type { PendingActor } from './pairing-service.ts';
 
 /** Owns channel intent independently from the lifetime of an activated Agent. */
 export class ConversationService {
@@ -210,31 +211,71 @@ export class ConversationService {
     return { openid, nickname: profile?.nickname ?? '', scene: profile?.scene ?? scene, sceneName: profile?.sceneName ?? '', claimedAt: profile?.claimedAt ?? 0 };
   }
 
-  /** QQ：核销配对码，把发送者 openid 记入对应名单。返回用户可读结果。 */
-  claimFromQQ(rawCode: string, actor: { openid: string; nickname: string; scope: ChatScope; sceneName: string }): { ok: boolean; message: string } {
+  /** 把（openid + 展示资料）写入指定名单（超管 / 私聊白名单 / 群白名单）。返回是否成功。 */
+  private applyMember(purpose: PairPurpose, openid: string, nickname: string, scene: 'group' | 'c2c', sceneName: string): { ok: boolean; message: string } {
+    const member: ClaimedMember = { openid, nickname, scene, sceneName, claimedAt: Date.now() };
+    this.pairing.recordClaimed(member);
+    if (purpose === 'owner') {
+      this.store.claimOwner(openid, { nickname, scene, sceneName, claimedAt: member.claimedAt });
+      return { ok: true, message: `✅ 已把「${nickname || openidTail(openid)}」设为斜杠命令超管。` };
+    }
+    const access = this.config.access;
+    const nextAccess = purpose === 'allow-group'
+      ? { ...access, groupMode: 'allowlist' as const, groupAllow: [...new Set([...access.groupAllow, openid])] }
+      : { ...access, c2cMode: 'allowlist' as const, c2cAllow: [...new Set([...access.c2cAllow, openid])] };
+    const persisted = updateProfileConfig({ access: nextAccess }, getProfileDir() ?? undefined, this.logger);
+    if (!persisted) return { ok: false, message: `⚠️ 已匹配「${nickname || openidTail(openid)}」，但写入 profile 失败（源码直载？）。请手动加入白名单。` };
+    return { ok: true, message: `✅ 已把「${nickname || openidTail(openid)}」加入${purpose === 'allow-group' ? '群' : '私聊'}白名单。` };
+  }
+
+  /**
+   * QQ 第一阶段：核销配对码，记录"待确认"，返回确认文案 + nonce（供发确认按钮）。
+   * 不写名单——等用户点「确认」再 applyClaim。
+   */
+  startClaim(rawCode: string, actor: PendingActor): { ok: boolean; message: string; nonce?: string; purpose?: PairPurpose } {
     const result = this.pairing.consume(rawCode);
     if (!result.ok) {
-      if (result.reason === 'expired') return { ok: false, message: '❌ 配对码已过期，请在网页重新生成。' };
-      return { ok: false, message: '❌ 配对码无效或已被使用，请核对后在网页重新生成。' };
+      return { ok: false, message: result.reason === 'expired' ? '❌ 配对码已过期，请在网页重新生成。' : '❌ 配对码无效或已被使用，请核对后在网页重新生成。' };
     }
-    const member: ClaimedMember = {
-      openid: actor.openid, nickname: actor.nickname, scene: actor.scope === 'group' ? 'group' : 'c2c',
-      sceneName: actor.sceneName, claimedAt: Date.now(),
-    };
-    if (result.purpose === 'owner') {
-      this.store.claimOwner(actor.openid, { nickname: actor.nickname, scene: member.scene, sceneName: actor.sceneName, claimedAt: member.claimedAt });
-      this.pairing.recordClaimed(member);
-      return { ok: true, message: `✅ 已把「${actor.nickname || openidTail(actor.openid)}」设为斜杠命令超管（${member.scene === 'group' ? '群' : '私聊'}）。` };
-    }
-    // 白名单：写入 cordis.patch 的 access。<purpose> 决定写 c2cAllow / groupAllow。
-    const access = this.config.access;
-    const nextAccess = result.purpose === 'allow-group'
-      ? { ...access, groupMode: 'allowlist' as const, groupAllow: [...new Set([...access.groupAllow, actor.openid])] }
-      : { ...access, c2cMode: 'allowlist' as const, c2cAllow: [...new Set([...access.c2cAllow, actor.openid])] };
-    const persisted = updateProfileConfig({ access: nextAccess }, getProfileDir() ?? undefined, this.logger);
-    this.pairing.recordClaimed(member);
-    if (!persisted) return { ok: true, message: `✅ 已核对「${actor.nickname || openidTail(actor.openid)}」，但写入 profile 失败（源码直载？）。请手动加入白名单。` };
-    return { ok: true, message: `✅ 已把「${actor.nickname || openidTail(actor.openid)}」加入${result.purpose === 'allow-group' ? '群' : '私聊'}白名单。` };
+    const nonce = this.pairing.beginConfirm(result.purpose, actor);
+    const label = result.purpose === 'owner' ? '斜杠命令超管' : result.purpose === 'allow-group' ? '群白名单' : '私聊白名单';
+    const who = `${actor.nickname || '(昵称未知)'} · ${openidTail(actor.openid)}（${actor.scope === 'group' ? `群「${actor.sceneName}」` : '私聊'}）`;
+    return { ok: true, nonce, purpose: result.purpose, message: `要把 ${who} 加入【${label}】吗？请点下方按钮确认。` };
+  }
+
+  /** QQ 第二阶段：用户点「确认」→ 真正写名单。 */
+  applyClaim(nonce: string): { ok: boolean; message: string } {
+    const pending = this.pairing.takeConfirm(nonce);
+    if (pending === undefined) return { ok: false, message: '⚠️ 认领已过期或已完成，请重新输入配对码。' };
+    return this.applyMember(pending.purpose, pending.actor.openid, pending.actor.nickname, pending.actor.scope, pending.actor.sceneName);
+  }
+
+  /** QQ：用户点「取消」→ 丢弃待确认。 */
+  cancelClaim(nonce: string): void { this.pairing.takeConfirm(nonce); }
+
+  /**
+   * QQ 按钮回调：处理认领确认/取消。
+   * 由 gateway dispatchInteraction 在 t==='claim' 时调用。返回是否已处理。
+   */
+  handleClaimInteraction(event: { id?: string; data?: { resolved?: { button_data?: string } }; openid?: string; user_openid?: string; group_member_openid?: string }): boolean {
+    const raw = event.data?.resolved?.button_data;
+    if (raw === undefined) return false;
+    let parsed: { t?: string; d?: string; n?: string };
+    try { parsed = JSON.parse(raw) as { t?: string; d?: string; n?: string }; } catch { return false; }
+    if (parsed.t !== 'claim' || typeof parsed.n !== 'string') return false;
+    if (parsed.d === 'confirm') { const r = this.applyClaim(parsed.n); this.logger.info(`QQ 认领确认: ${r.message}`); }
+    else { this.cancelClaim(parsed.n); this.logger.info('QQ 认领已取消'); }
+    return true;
+  }
+
+  /**
+   * Web：手动按 openID 直接添加成员（超管 / 白名单）。允许用户自行输入 openid。
+   * 显示昵称留空，待日后其在 QQ 发言或认领时补全。
+   */
+  addManualMember(purpose: PairPurpose, openid: string): { ok: boolean; message: string } {
+    const id = openid.trim();
+    if (!id || id.length > 1024) return { ok: false, message: 'openID 无效' };
+    return this.applyMember(purpose, id, '', purpose === 'allow-group' ? 'group' : 'c2c', '');
   }
 
   /** Web：撤销一个已认领身份（超管 / 白名单）。 */

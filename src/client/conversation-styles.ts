@@ -92,6 +92,8 @@ export function installConversationStyles(): void {
 .imqc-pair { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); }
 .imqc-pair > .imqc-inline { justify-content: space-between; }
 .imqc-pairCode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.imqc-pairManual { flex-wrap: nowrap; }
+.imqc-pairManual > :first-child { flex: 1; min-width: 120px; }
 .imqc-pairCode code { font-size: 15px; font-weight: 600; letter-spacing: 1px; padding: 2px 8px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .imqc-pairMembers { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .imqc-pairMembers > li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 0.5px solid var(--dsw-alias-border-l2); }

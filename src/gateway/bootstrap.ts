@@ -40,6 +40,7 @@ function dispatchInteraction(event: InteractionEvent, manager: SessionManager): 
   if (!button) return false;
   if (button.t === 'question') return manager.questionChannel?.handleInteraction(event) ?? false;
   if (button.t === 'approval') return manager.approvalChannel?.handleInteraction(event) ?? false;
+  if (button.t === 'claim') return manager.conversations?.handleClaimInteraction(event as never) ?? false;
   return false;
 }
 

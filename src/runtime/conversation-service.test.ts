@@ -427,3 +427,51 @@ describe('manual QQ reply sources and visible failures', () => {
     expect(record.parts[0]?.state).toBe('accepted'); expect(record.parts[1]?.state).toBe('failed');
   });
 });
+
+
+describe('pairing-code claim (two-phase)', () => {
+  it('issues a code, startClaim returns a nonce without writing, applyClaim commits the owner', () => {
+    const f = fixture();
+    const { code } = f.service.issuePairCode('owner');
+    const actor = { openid: 'user-openid-1234', nickname: '小明', scope: 'group' as const, sceneName: '测试群' };
+    // 第一阶段：仅返回确认 nonce，不写名单
+    const started = f.service.startClaim(code, actor);
+    expect(started.ok).toBe(true);
+    expect(typeof started.nonce).toBe('string');
+    expect(f.service.store.ownerIds()).not.toContain('user-openid-1234');
+    // 第二阶段：确认后写入
+    const applied = f.service.applyClaim(started.nonce!);
+    expect(applied.ok).toBe(true);
+    expect(f.service.store.ownerIds()).toContain('user-openid-1234');
+    // 幂等/一次性：再次确认同 nonce 失败
+    expect(f.service.applyClaim(started.nonce!).ok).toBe(false);
+  });
+
+  it('rejects an invalid or reused pairing code at startClaim', () => {
+    const f = fixture();
+    const actor = { openid: 'o', nickname: 'n', scope: 'c2c' as const, sceneName: '私聊' };
+    expect(f.service.startClaim('BADCODE', actor).ok).toBe(false);
+    const { code } = f.service.issuePairCode('owner');
+    expect(f.service.startClaim(code, actor).ok).toBe(true);
+    // 码单次：再核销同一码失败
+    expect(f.service.startClaim(code, actor).ok).toBe(false);
+  });
+
+  it('manual openID add writes an owner without a pairing code', () => {
+    const f = fixture();
+    const r = f.service.addManualMember('owner', '  manual-oid  ');
+    expect(r.ok).toBe(true);
+    expect(f.service.store.ownerIds()).toContain('manual-oid');
+    expect(f.service.pairStatus().owners.map((m) => m.openid)).toContain('manual-oid');
+  });
+
+  it('handleClaimInteraction confirm commits the pending claim from a button callback', () => {
+    const f = fixture();
+    const { code } = f.service.issuePairCode('owner');
+    const started = f.service.startClaim(code, { openid: 'btn-oid', nickname: '按钮人', scope: 'c2c', sceneName: '私聊' });
+    const handled = f.service.handleClaimInteraction({ data: { resolved: { button_data: JSON.stringify({ t: 'claim', d: 'confirm', n: started.nonce }) } } } as never);
+    expect(handled).toBe(true);
+    expect(f.service.store.ownerIds()).toContain('btn-oid');
+  });
+});
+

@@ -12,8 +12,13 @@ import { generatePairCode, normalizePairCode, type ClaimedMember, type PairChall
 
 /** 配对码有效期（毫秒）。 */
 const CODE_TTL_MS = 3 * 60 * 1000;
+/** 输码后等待用户点"确认"的有效期。 */
+const CONFIRM_TTL_MS = 2 * 60 * 1000;
 /** 同时进行中的码上限。 */
 const MAX_PENDING = 20;
+
+/** 待确认认领的发起者信息（QQ 侧发送者）。 */
+export interface PendingActor { openid: string; nickname: string; scope: 'group' | 'c2c'; sceneName: string }
 
 export type ConsumeResult =
   | { ok: true; purpose: PairPurpose }
@@ -73,6 +78,27 @@ export class PairingService {
       const m = this.claimed[i];
       if (m && m.openid === openid && (scene === undefined || m.scene === scene)) this.claimed.splice(i, 1);
     }
+  }
+
+  // ── 待确认（QQ 输码后、用户点"确认"前）──
+  private readonly pendingConfirms = new Map<string, { purpose: PairPurpose; actor: PendingActor; expiresAt: number }>();
+
+  /** 记录一个待确认认领，返回 nonce（按钮回调携带）。 */
+  beginConfirm(purpose: PairPurpose, actor: PendingActor): string {
+    const nonce = generatePairCode(this.random) + generatePairCode(this.random);
+    this.pendingConfirms.set(nonce, { purpose, actor, expiresAt: this.now() + CONFIRM_TTL_MS });
+    // 清理过期
+    for (const [k, v] of this.pendingConfirms) if (this.now() > v.expiresAt) this.pendingConfirms.delete(k);
+    return nonce;
+  }
+
+  /** 取出并删除待确认（点按钮时核销；过期/未知返回 undefined）。 */
+  takeConfirm(nonce: string): { purpose: PairPurpose; actor: PendingActor } | undefined {
+    const entry = this.pendingConfirms.get(nonce);
+    if (entry === undefined) return undefined;
+    this.pendingConfirms.delete(nonce);
+    if (this.now() > entry.expiresAt) return undefined;
+    return { purpose: entry.purpose, actor: entry.actor };
   }
 
   /** 展示进行中的码（未过期的）。 */
