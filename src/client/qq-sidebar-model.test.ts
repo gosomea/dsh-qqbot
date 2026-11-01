@@ -103,13 +103,16 @@ describe('independent QQ sidebar state', () => {
     expect(store.getSnapshot().sidebar).toBe(before);
     expect(store.getSnapshot().sidebar).toMatchObject({ sidebarMode: 'qq', selectedSessionId: 'old-0', expandedPeers: ['group'], showAllPeers: ['group'], search: '工作', collapsedScopes: ['c2c'] });
     expect(store.resumeSessionId()).toBe('old-0');
+    // resumeTarget also resolves the conversation name so the welcome entry can show which chat it continues.
+    expect(store.resumeTarget()).toMatchObject({ sessionId: 'old-0' });
+    expect(store.resumeTarget()?.name).toBeTruthy();
     expect(openSession).toHaveBeenCalledExactlyOnceWith('old-0');
   });
   it('has no navigation or creation side effect for group expansion, searching, or a missing Session', () => {
     const openSession = vi.fn(); const store = new QQSessionStore({ openSession });
     store.accept({ conversations: [peer({ currentSessionId: null, sessions: [] })], tools: [], ownerIds: [] });
     store.togglePeer('group'); store.toggleScope('group'); store.setSearch('讨论群'); store.showAllSessions('group');
-    expect(openSession).not.toHaveBeenCalled(); expect(store.resumeSessionId()).toBeNull();
+    expect(openSession).not.toHaveBeenCalled(); expect(store.resumeSessionId()).toBeNull(); expect(store.resumeTarget()).toBeNull();
   });
   it('reveals a selected older Session beyond the default five while leaving an unselected peer at five', () => {
     const store = new QQSessionStore({ openSession: vi.fn() });

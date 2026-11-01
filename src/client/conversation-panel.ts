@@ -28,7 +28,7 @@ export function ConversationPanel({ onOpenSettings, store }: ConversationPanelPr
   const bind = useBindState();
   const directory = useQQSessionStore(store);
   const entries = directory.directory?.conversations ?? [];
-  const resumable = store.resumeSessionId();
+  const resumable = store.resumeTarget();
   return h('section', { className: 'imqc imqq-welcome', 'aria-label': 'QQ 会话' },
     h('svg', { viewBox: '0 0 24 24', 'aria-hidden': true }, h('path', { d: QQ_BOT_LOGO_PATH, fill: 'currentColor' })),
     h('h3', null, 'QQ 会话'),
@@ -38,8 +38,9 @@ export function ConversationPanel({ onOpenSettings, store }: ConversationPanelPr
     bind.state?.phase !== 'bound' ? h(BindPanelBody, bind) : null,
     directory.error ? h('p', { className: 'imqc-error', role: 'alert' }, directory.error) : null,
     h('div', { className: 'imqq-welcomeActions' },
-      resumable ? h(Button, { variant: 'outline', size: 'sm', onClick: () => store.openSession(resumable) }, '继续 QQ 会话') : null,
-      h(Button, { variant: 'outline', size: 'sm', onClick: onOpenSettings }, '账号设置')));
+      resumable ? h(Button, { variant: 'outline', size: 'sm', onClick: () => store.openSession(resumable.sessionId) }, `继续与「${resumable.name}」的会话`) : null,
+      h(Button, { variant: 'outline', size: 'sm', onClick: onOpenSettings }, '账号设置')),
+    resumable ? h('p', { className: 'imqc-hint' }, `「继续」会打开最近活跃对话「${resumable.name}」的当前会话；要开新会话，请在左侧该对话的「＋」或菜单里新建。`) : null);
 }
 
 export function QQAccountOwners({ store, t }: { store: QQSessionStore; t?: import('./qq-locale.ts').QQTranslate }): ReactNode {

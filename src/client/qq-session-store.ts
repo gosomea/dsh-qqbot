@@ -86,6 +86,13 @@ export class QQSessionStore {
     return [...(this.state.directory?.conversations ?? [])].sort((a, b) => b.lastActivity - a.lastActivity)
       .find((entry) => entry.admitted && entry.currentSessionId)?.currentSessionId ?? null;
   }
+  /** 最近可继续的会话及其对话名称（欢迎页"继续会话"入口用，便于显示跳到哪个群/私聊）。 */
+  resumeTarget(): { sessionId: string; name: string } | null {
+    const sessionId = this.resumeSessionId();
+    if (!sessionId) return null;
+    const entry = this.entry(sessionId);
+    return entry ? { sessionId, name: conversationName(entry) } : null;
+  }
   togglePeer(key: string): void { this.updateSidebar({ expandedPeers: toggleValue(this.state.sidebar.expandedPeers, key) }); }
   toggleScope(scope: QQScope): void { this.updateSidebar({ collapsedScopes: toggleValue(this.state.sidebar.collapsedScopes, scope) }); }
   showAllSessions(key: string): void { if (!this.state.sidebar.showAllPeers.includes(key)) this.updateSidebar({ showAllPeers: [...this.state.sidebar.showAllPeers, key] }); }
