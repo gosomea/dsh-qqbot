@@ -104,6 +104,24 @@ describe('QQ timeline behavior', () => {
     expect(container.textContent).not.toContain('needle-private-body');
     expect(container.querySelectorAll('.imqc-timelineMessage')).toHaveLength(0);
   });
+  it('renders message bodies as markdown and shows media attachments', async () => {
+    vi.useFakeTimers(); const entry = fixture(); const { store, perform } = setup(entry);
+    const inbound = { direction: 'inbound', order: 1, change: 1, message: { id: 'm1', senderId: 'user', senderName: '小明', at: 1, mentioned: true,
+      text: '## 标题\n\n- 一\n- 二\n\n**加粗** 与 `code`', attachments: [
+        { name: 'pic.png', type: 'image/png', url: 'https://example.com/pic.png', kind: 'image' },
+        { name: 'clip.mp4', type: 'video/mp4', url: 'https://example.com/clip.mp4', kind: 'video' },
+        { name: 'doc.pdf', type: 'application/pdf', url: 'https://example.com/doc.pdf', kind: 'file' },
+      ] } };
+    perform.mockResolvedValueOnce({ timeline: { items: [inbound], snapshot: 1, hasMore: false } });
+    await act(async () => root.render(h(QQMessageTimeline, { entry, store })));
+    const msg = container.querySelector('.imqc-timelineMessage');
+    expect(msg.querySelector('h2')?.textContent).toBe('标题');
+    expect(msg.querySelectorAll('li')).toHaveLength(2);
+    expect(msg.querySelector('strong')?.textContent).toBe('加粗');
+    expect(msg.querySelector('img.imqc-attachImage')?.getAttribute('src')).toBe('https://example.com/pic.png');
+    expect(msg.querySelector('video.imqc-attachVideo')?.getAttribute('src')).toBe('https://example.com/clip.mp4');
+    expect(msg.querySelector('a.imqc-attachFile')?.getAttribute('href')).toBe('https://example.com/doc.pdf');
+  });
   it('removes count-evicted rows after applying their tombstones', async () => {
     vi.useFakeTimers(); const entry = fixture(); const { store, perform } = setup(entry);
     const row = { direction: 'inbound', order: 1, change: 1, message: { id: 'evicted', senderId: 'user', senderName: '小明', at: 1, text: 'old body', mentioned: true, attachments: [] } };
