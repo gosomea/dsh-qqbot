@@ -8,6 +8,9 @@ import { conversationAction, sendConversationAnswer } from './conversation-api.t
 import { conversationName } from './conversation-state.ts';
 import { fetchJson } from './http.ts';
 
+/** 侧栏浏览态的 localStorage 键（展开/收起/选中/折叠）。 */
+const SIDEBAR_STORAGE_KEY = 'im-qqbot/sidebar/v1';
+
 export type QQDrawerTab = 'settings' | 'messages';
 export interface QQDrawerTarget { readonly key: string; readonly sessionId: string | null; readonly name: string; readonly tab: QQDrawerTab }
 export interface QQAnswerPreview { readonly key: string; readonly sessionId: string; readonly messageId: string; readonly name: string; readonly text: string; readonly operationId: string }
@@ -48,11 +51,33 @@ export class QQSessionStore {
   private refreshDirectory: (() => void) | undefined;
   private navigate: ((sessionId: string) => void) | undefined;
   private navigationGeneration = 0;
-  constructor(private readonly navigation: Pick<UiWorkspace, 'openSession'>) {}
+  constructor(private readonly navigation: Pick<UiWorkspace, 'openSession'>) {
+    this.state = { ...this.state, sidebar: { ...this.state.sidebar, ...this.loadSidebar() } };
+  }
+  /** 读取持久化的侧栏浏览态（刷新后保留展开/收起/选中/折叠/搜索）。 */
+  private loadSidebar(): Partial<QQSidebarState> {
+    try {
+      const raw = globalThis.localStorage?.getItem(SIDEBAR_STORAGE_KEY);
+      if (!raw) return {};
+      const value = JSON.parse(raw) as Partial<QQSidebarState>;
+      return {
+        ...(Array.isArray(value.expandedPeers) ? { expandedPeers: value.expandedPeers.filter(x => typeof x === 'string') } : {}),
+        ...(Array.isArray(value.collapsedScopes) ? { collapsedScopes: value.collapsedScopes.filter(x => x === 'group' || x === 'c2c') } : {}),
+        ...(Array.isArray(value.showAllPeers) ? { showAllPeers: value.showAllPeers.filter(x => typeof x === 'string') } : {}),
+        ...(typeof value.selectedSessionId === 'string' || value.selectedSessionId === null ? { selectedSessionId: value.selectedSessionId } : {}),
+      };
+    } catch { return {}; }
+  }
+  private saveSidebar(): void {
+    try {
+      const s = this.state.sidebar;
+      globalThis.localStorage?.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify({ expandedPeers: s.expandedPeers, collapsedScopes: s.collapsedScopes, showAllPeers: s.showAllPeers, selectedSessionId: s.selectedSessionId }));
+    } catch { /* storage 不可用则忽略 */ }
+  }
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   getSnapshot = (): QQSessionState => this.state;
   private update(change: Partial<QQSessionState>): void { this.state = { ...this.state, ...change }; for (const listener of this.listeners) listener(); }
-  private updateSidebar(change: Partial<QQSidebarState>): void { this.update({ sidebar: { ...this.state.sidebar, ...change } }); }
+  private updateSidebar(change: Partial<QQSidebarState>): void { this.update({ sidebar: { ...this.state.sidebar, ...change } }); this.saveSidebar(); }
   setSidebarMode(sidebarMode: QQSidebarState['sidebarMode']): void {
     if (this.state.sidebar.sidebarMode !== sidebarMode) { this.cancelNavigation(); this.updateSidebar({ sidebarMode }); }
   }
