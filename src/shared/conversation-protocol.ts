@@ -68,13 +68,16 @@ export interface ConversationView extends ConversationEntry {
   passiveReply?: { expiresAt: number | null };
   currentWorkspace?: { id: string; title: string; path: string } | null;
 }
+/** 消息附件：type 为 MIME/归类，url 可直接在 web 展示（图片/视频/语音/文件下载）。 */
+export interface QQAttachment { name: string; type: string; url?: string; kind?: 'image' | 'video' | 'voice' | 'file' }
+
 export interface GroupMessageRecord {
   cursor?: number;
   contextEligible?: boolean; provenance?: MessageProvenance;
   sessionId?: string; turnId?: string; sourceMessageId?: string;
   bodyState?: RecordingBodyState; bodyHash?: string;
   id: string; senderId: string; senderName: string; text: string; at: number;
-  mentioned: boolean; attachments: Array<{ name: string; type: string }>;
+  mentioned: boolean; attachments: Array<QQAttachment>;
 }
 export interface DeliveryRecord extends DeliveryProvenance {
   id: string; key: string; text: string; at: number; updatedAt: number;

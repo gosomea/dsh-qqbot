@@ -40,7 +40,13 @@ export function conversationGate(manager: SessionManager) {
       id: msg.messageId, senderId: msg.senderId, senderName: msg.senderName || '', text: redactRecordingText(text, [service.config.appSecret]),
       contextEligible: !isCommand && !isAnswer, provenance: isCommand ? 'command' : isAnswer ? 'interaction' : 'qq',
       at: Date.parse(msg.timestamp) || Date.now(), mentioned,
-      attachments: (msg.attachments ?? []).map(att => ({ name: att.filename || '', type: att.content_type || '' })),
+      attachments: (msg.attachments ?? []).map(att => {
+        const ct = att.content_type || '';
+        const kind: 'image' | 'video' | 'voice' | 'file' = ct === 'image' || ct.startsWith('image/') ? 'image' : ct === 'video' || ct.startsWith('video/') ? 'video' : ct === 'voice' || ct.startsWith('audio/') ? 'voice' : 'file';
+        const raw = (att as { url?: string }).url;
+        const url = raw ? (raw.startsWith('//') ? `https:${raw}` : raw) : undefined;
+        return { name: att.filename || '', type: ct, kind, ...(url ? { url } : {}) };
+      }),
     }, isTrigger));
     if (!receipt.accepted) { ctx.stop('duplicate-message'); return; }
     const { releaseTrigger } = receipt;

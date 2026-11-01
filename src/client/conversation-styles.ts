@@ -228,6 +228,12 @@ export function installConversationStyles(): void {
 .imqc-timelineRows { display: flex; flex-direction: column; gap: 12px; margin: 14px 0; }
 .imqc-timelineMessage { max-width: 85%; width: fit-content; padding: 8px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); display: flex; align-items: flex-start; gap: 8px; }
 .imqc-timelineMessage[data-failed] { border-color: var(--dsw-alias-state-error-primary); }
+.imqc-attachRow { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.imqc-attachChip { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+.imqc-attachImage { max-width: 260px; max-height: 260px; border-radius: var(--dsw-radius-md); display: block; }
+.imqc-attachVideo { max-width: 320px; border-radius: var(--dsw-radius-md); display: block; }
+.imqc-attachAudio { width: 260px; }
+.imqc-attachFile { font-size: 12px; color: var(--dsw-alias-label-link, var(--dsw-alias-label-secondary)); word-break: break-all; }
 .imqc-timelineMessage[data-direction=outbound] { align-self: flex-end; background: var(--dsw-alias-bg-layer-2); }
 .imqq-settingsModal { width: min(1000px, calc(100vw - 32px)); height: min(900px, calc(100dvh - 32px)); }
 /* 弹窗内容列限高，让 body 成为滚动容器（flex 滚动经典解法 min-height:0） */

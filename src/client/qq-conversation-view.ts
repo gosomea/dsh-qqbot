@@ -1,6 +1,6 @@
 import { createElement as h, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { SessionId } from '@deepseek-ai/dsh-session/types';
-import { Button, Input, SegmentedTabs, type SegmentedTab } from '@deepseek-ai/dsh-client-ui-primitives';
+import { Button, Input, MarkdownText, SegmentedTabs, type MarkdownLabels, type SegmentedTab } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 import type { ConversationView, TimelineEntry, TimelinePage } from '../shared/conversation-protocol.ts';
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types';
@@ -19,6 +19,17 @@ const tabs: [SegmentedTab<ViewTab>, ...SegmentedTab<ViewTab>[]] = [
   { value: 'settings', label: '会话设置', id: 'qq-settings-tab', panelId: 'qq-settings-panel' },
   { value: 'messages', label: '消息记录', id: 'qq-messages-tab', panelId: 'qq-messages-panel' },
 ];
+const TIMELINE_MARKDOWN_LABELS: MarkdownLabels = { code: { copyLabel: '复制', copiedLabel: '已复制' }, footnotes: '脚注' };
+/** 按附件类型渲染：图片/视频/语音内嵌，文件给下载链接；无 url 时退化为类型徽标+文件名。 */
+function renderAttachment(att: { name: string; type: string; url?: string; kind?: 'image' | 'video' | 'voice' | 'file' }, index: number): ReactNode {
+  const label = att.name || att.type || '附件';
+  const kind = att.kind ?? (att.type.startsWith('image/') ? 'image' : att.type.startsWith('video/') ? 'video' : att.type.startsWith('audio/') ? 'voice' : 'file');
+  if (!att.url) return h('span', { key: index, className: 'imqc-attachChip' }, `[${kind === 'image' ? '图片' : kind === 'video' ? '视频' : kind === 'voice' ? '语音' : '文件'}] ${label}`);
+  if (kind === 'image') return h('img', { key: index, className: 'imqc-attachImage', src: att.url, alt: label, loading: 'lazy' });
+  if (kind === 'video') return h('video', { key: index, className: 'imqc-attachVideo', src: att.url, controls: true, preload: 'metadata' });
+  if (kind === 'voice') return h('audio', { key: index, className: 'imqc-attachAudio', src: att.url, controls: true, preload: 'metadata' });
+  return h('a', { key: index, className: 'imqc-attachFile', href: att.url, target: '_blank', rel: 'noreferrer noopener' }, `📎 ${label}`);
+}
 export function QQConversationView({ sessionId, store, selectorSource, t, useSessions, useWorkspaces, useProjection, conversationKey, initialTab, defaultWorkspaceName }: {
   sessionId: string | null; store: QQSessionStore; selectorSource: SelectorSource; t: QQTranslate; conversationKey?: string; initialTab?: QQDrawerTab;
   useSessions?: PropsRuntime<'conversation.view'>['useSessions']; useWorkspaces?: PropsRuntime<'conversation.view'>['useWorkspaces']; useProjection?: PropsRuntime<'conversation.view'>['useProjection']; defaultWorkspaceName?: string;
@@ -137,8 +148,8 @@ export function QQMessageTimeline({ entry, store }: { entry: ConversationView; s
       return h('article', { key: timelineIdentity(item), className: 'imqc-timelineMessage', 'data-direction': item.direction, 'data-failed': failed || undefined },
         h('div', { className: 'imqc-messageBody' },
           h('div', { className: 'imqc-messageMeta' }, h('span', { className: 'imqc-messageWho' }, incoming ? (item.message.senderName || item.message.senderId.slice(-8)) : '机器人'), h('span', { className: 'imqc-messageWhen' }, new Date(record.at).toLocaleString())),
-          h('p', { className: 'imqc-messageText' }, body),
-          incoming && item.message.attachments.length ? h('p', { className: 'imqc-hint' }, item.message.attachments.map(attachment => `[${attachment.type}] ${attachment.name}`).join('、')) : null,
+          body ? h(MarkdownText, { text: body, labels: TIMELINE_MARKDOWN_LABELS, variant: 'compact' }) : null,
+          incoming && item.message.attachments.length ? h('div', { className: 'imqc-attachRow' }, ...item.message.attachments.map((att, i) => renderAttachment(att, i))) : null,
           failed ? h('p', { className: 'imqc-error imqc-messageWarn', role: 'alert' }, item.delivery.state === 'failed' ? '发送失败' : '结果未知（可能部分已发出，请核对 QQ）') : null),
         h('div', { className: 'imqc-messageAside' },
           // 只在发送失败/结果未知时提供诊断详情（成功消息无需技术信息）。
