@@ -100,15 +100,34 @@ function SessionRow({ session, entry, store, t, selected, current = false, onDia
   session: QQSidebarSession; entry: ConversationView; store: QQSessionStore; t: QQTranslate; selected: boolean; current?: boolean; onDialog: (dialog: SidebarDialog) => void;
 }): ReactNode {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copySessionId = (): void => {
+    const text = session.sessionId;
+    const done = (): void => { setCopied(true); setTimeout(() => setCopied(false), 1500); };
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) { void navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done)); }
+      else fallbackCopy(text, done);
+    } catch { fallbackCopy(text, done); }
+  };
   return h('div', { className: 'imqq-sessionRow', 'data-selected': selected, 'data-current': current },
     h('button', { type: 'button', className: 'imqq-sessionOpen', 'aria-current': selected ? 'page' : undefined, onClick: () => store.openSession(session.sessionId, { preserveVisibleFilter: true }), title: `${session.title}\n${current ? '当前生效会话' : '历史会话'}\n${session.workspace}${session.path && session.path !== session.workspace ? `\n${session.path}` : ''}` },
       h('span', { className: 'imqq-sessionTitle' }, h('span', { className: 'imqq-sessionTitleText', title: session.title }, session.title), current ? h('span', { className: 'imqq-sessionCurrent', title: t('sidebar.current.title') }, t('sidebar.current')) : null),
-      h('span', { className: 'imqq-sessionMeta' }, h('span', { className: 'imqq-workspace' }, session.workspace))),
+      h('span', { className: 'imqq-sessionMeta' }, h('span', { className: 'imqq-workspace' }, session.workspace), copied ? h('span', { className: 'imqq-copied' }, '已复制') : null)),
     h(Menu, { open: menuOpen, onClose: () => setMenuOpen(false), portal: true, align: 'end', compact: true,
       anchor: h(Button, { variant: 'ghost', size: 'sm', className: 'imqq-menuTrigger', 'aria-label': `会话菜单 ${session.title}`, 'aria-haspopup': 'menu', 'aria-expanded': menuOpen, onClick: () => setMenuOpen(!menuOpen) }, '···'),
-      items: [{ type: 'label', id: 'history-label', text: '此历史会话' }, { id: 'rename', label: '重命名历史会话…' },
+      items: [{ type: 'label', id: 'history-label', text: '此历史会话' }, { id: 'rename', label: '重命名历史会话…' }, { id: 'copyId', label: '复制 Session ID' },
         { type: 'separator', id: 'current-separator' }, { id: 'newSession', label: '新建会话…', disabled: !entry.admitted || entry.running }],
-      onSelect: (id) => { setMenuOpen(false); if (id === 'rename') onDialog({ kind: 'rename', sessionId: session.sessionId, title: session.nativeTitle ?? '' }); else if (id === 'newSession') store.openOperation(entry); } }));
+      onSelect: (id) => { setMenuOpen(false); if (id === 'rename') onDialog({ kind: 'rename', sessionId: session.sessionId, title: session.nativeTitle ?? '' }); else if (id === 'copyId') copySessionId(); else if (id === 'newSession') store.openOperation(entry); } }));
+}
+
+/** Clipboard fallback for browsers/contexts without the async Clipboard API. */
+function fallbackCopy(text: string, done: () => void): void {
+  try {
+    const area = document.createElement('textarea');
+    area.value = text; area.style.position = 'fixed'; area.style.opacity = '0';
+    document.body.appendChild(area); area.select();
+    document.execCommand('copy'); document.body.removeChild(area); done();
+  } catch { /* copy unavailable */ }
 }
 
 function SidebarEditDialog({ target, store, actions, onClose }: {

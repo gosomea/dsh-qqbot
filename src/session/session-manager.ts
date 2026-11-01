@@ -50,24 +50,6 @@ const COMPACTION_ERROR_HINTS: Record<string, string> = {
   persistence: '压缩完成但保存失败',
 };
 
-/** system-prompt section 最小结构（name/order/text） */
-interface PromptSection {
-  name: string;
-  order: number;
-  text: string;
-}
-
-/** system-prompt/assemble waterfall 的 context 最小结构 */
-interface AssembleContext {
-  agent?: DshAgent;
-}
-
-/** system-prompt/assemble 的组装产物最小结构 */
-interface AssembledPrompt {
-  sections?: PromptSection[];
-  [key: string]: unknown;
-}
-
 interface SessionPresetQuery {
   observeSession(id: SessionId, options: { projectionMode: 'all' }): Promise<Disposable & {
     projections?: { values: { agentPreset?: string | null } };
@@ -130,42 +112,6 @@ export class SessionManager {
       },
     );
 
-    this.registerScopePromptInjection();
-  }
-
-  /**
-   * 通过 system-prompt/assemble waterfall 注入群聊/私聊额外 system prompt。
-   *
-   * 该事件在每次 turn 构建 request 时触发；此处按会话 scope（群聊/私聊）
-   * 追加对应的额外 prompt section。通过持久对话目录识别原生恢复的 Agent，
-   * 不依赖 QQ 输入首次到达后才恢复的管理器缓存。
-   */
-  private registerScopePromptInjection(): void {
-    const assemble = async (
-      _assembly: unknown,
-      context: AssembleContext,
-      next: () => Promise<AssembledPrompt>,
-    ): Promise<AssembledPrompt> => {
-      const assembled = await next();
-      const agent = context.agent;
-      if (!agent || this.agents.get(agent.id) !== agent) return assembled;
-
-      const entry = this.conversations?.conversationForSession(agent.id);
-      if (!entry) return assembled;
-
-      const prompt = ['当前对话来自 QQ。根据当前消息和角色设定自然回复。工具以本轮实际提供的清单为准；没有可用工具时直接回答，不输出内部工具调用协议或模拟调用。只有用户明确要求处理文件或执行任务时才使用获准的相关工具。',
-        this.conversations?.rolePrompt(agent.id)].filter(Boolean).join('\n');
-      if (!prompt) return assembled;
-
-      return {
-        ...assembled,
-        sections: [...(assembled.sections ?? []), { name: 'qqbot:scope-prompt', order: 90, text: prompt }],
-      };
-    };
-
-    (this.ctx as unknown as {
-      on(event: 'system-prompt/assemble', handler: typeof assemble): void;
-    }).on('system-prompt/assemble', assemble);
   }
 
   /**

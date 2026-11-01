@@ -157,6 +157,7 @@ export function installConversationStyles(): void {
 .imqq-sessionTitle { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
 .imqq-sessionTitleText, .imqq-workspace { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
 .imqq-workspace { width: 100%; }
+.imqq-copied { flex: none; font-size: 10px; color: var(--dsw-alias-state-success-primary); }
 .imqq-sessionMeta { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; color: var(--dsw-alias-label-tertiary); font-size: 10px; }
 .imqq-workspace { flex: 1; min-width: 0; }
 .imqq-more { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: 11px/1.4 var(--dsw-font-family); padding: 8px 6px; cursor: pointer; text-align: left; }

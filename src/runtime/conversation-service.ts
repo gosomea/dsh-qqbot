@@ -16,6 +16,7 @@ import { ConversationStore } from '../conversations/index.ts';
 import { defaultPolicy, validatePolicy, validatePolicyTools, catalogTools, installPolicy, toolCatalogEntry } from '../policy/index.ts';
 import type { ConversationEntry, ConversationPolicy, ConversationSnapshot, SlashCommandDescriptor, ToolCatalogEntry, DeliveryRecord, GroupMessageRecord } from '../shared/conversation-protocol.ts';
 import { describeCommands } from '../commands/index.ts';
+import { installQQPrompt, type QQPromptHandle, type QQPromptEntry } from '../prompt/index.ts';
 import { PLUGIN_HOME, resolveAgentCwd } from '../shared/dirs.ts';
 import { getProfileDir } from '../shared/index.ts';
 import { updateProfileConfig } from '../setup/persist.ts';
@@ -64,6 +65,7 @@ export class ConversationService {
   }
   private readonly attached = new WeakSet<object>();
   private readonly policyDisposers = new Map<string, () => void>();
+  private readonly promptHandles = new Map<string, QQPromptHandle>();
   private readonly catalogs = new Map<string, ToolCatalogEntry>();
   private readonly deliveryQueue = new ConversationQueue();
   private sender?: QQBotSender;
@@ -222,6 +224,7 @@ export class ConversationService {
       protectedDescendant: agent => this.protectedDescendant(entry.key, agent),
       onDenied: (tool: string, reason: string) => this.logger.warn(`QQ tool policy denied: ${tool} ${reason}`),
     }));
+    this.installAgentPrompt(record, entry.key);
     this.store.bindSession(entry.key, record.sessionId, workspaceId, record.agent.session.header?.cwd, presetId);
     this.attached.add(record.agent);
   }
@@ -295,6 +298,7 @@ export class ConversationService {
       const nextGuard = installPolicy(record.agent.ctx, { agentId: record.sessionId, getPolicy: () => this.effectivePolicy(key, record.sessionId), getCatalog: () => [...this.catalogs.values()], protectedDescendant: agent => this.protectedDescendant(key, agent) });
       this.policyDisposers.get(record.sessionId)?.();
       this.policyDisposers.set(record.sessionId, nextGuard);
+      this.installAgentPrompt(record, key);
     }
   }
   private applyExecutionPolicy(record: SessionRecord, policy: ConversationPolicy, force = false): void {
@@ -489,6 +493,7 @@ export class ConversationService {
     if (record && executionChanged) {
       this.policyDisposers.get(record.sessionId)?.();
       this.policyDisposers.set(record.sessionId, installPolicy(record.agent.ctx, { agentId: record.sessionId, getPolicy: () => this.effectivePolicy(key, record.sessionId), getCatalog: () => [...this.catalogs.values()], protectedDescendant: agent => this.protectedDescendant(key, agent) }));
+      this.installAgentPrompt(record, key);
     }
     this.pruneExpired();
     const nextSession = before.settings?.prompt !== settings.prompt || before.settings?.cwd !== settings.cwd || before.settings?.preset !== settings.preset;
@@ -694,6 +699,51 @@ export class ConversationService {
     return '';
   }
   private describeRole(role: ConversationPolicy['role']): string { return [role.description, role.tone && `语气：${role.tone}`, role.world && `世界观：${role.world}`, role.prompt].filter(Boolean).join('\n'); }
+
+  /** 从对话条目派生 prompt 数据（惰性：persona/extra 均每步现读 entry）。 */
+  private promptEntryData(key: string): QQPromptEntry {
+    return {
+      scope: this.requireEntry(key).scope,
+      personaCard: () => this.personaCardOf(this.requireEntry(key)),
+      extraPrompts: () => this.extraPromptsOf(this.requireEntry(key)),
+    };
+  }
+  /** 人设卡：优先 role.card（role-card markdown），否则由 role 各字段生成 markdown。 */
+  private personaCardOf(entry: ConversationEntry): string {
+    const role = entry.policy.role as ConversationPolicy['role'] & { card?: string };
+    if (typeof role.card === 'string' && role.card.trim()) return role.card;
+    const lines: string[] = ['# 你是谁'];
+    if (role.description) lines.push(role.description);
+    if (role.tone) lines.push(`- 语气：${role.tone}`);
+    if (role.world) lines.push(`- 世界观：${role.world}`);
+    if (role.prompt) lines.push(role.prompt);
+    return lines.join('\n');
+  }
+  /** 补充提示词：新字段 promptGroup/promptDirect；旧 settings.prompt 迁移期按 scope 归入。 */
+  private extraPromptsOf(entry: ConversationEntry): { group?: string; direct?: string } {
+    const settings = entry.settings as (typeof entry.settings & { promptGroup?: string; promptDirect?: string }) | undefined;
+    if (!settings) return {};
+    const legacy = (settings as { prompt?: string }).prompt ?? '';
+    return {
+      group: settings.promptGroup ?? (entry.scope === 'group' ? legacy : undefined),
+      direct: settings.promptDirect ?? (entry.scope === 'c2c' ? legacy : undefined),
+    };
+  }
+  /** 记录本轮元信息（来源/@/发送者/时间），供 turn-meta runtime context 在组装时读取。 */
+  setTurnMeta(key: string, meta: import('../prompt/index.ts').TurnMeta): void {
+    const sessionId = this.requireEntry(key).currentSessionId;
+    if (!sessionId) return;
+    this.promptHandles.get(sessionId)?.setTurnMeta(meta);
+  }
+  /** 安装（或重装）某 agent 的 QQ prompt sections/contexts。 */
+  private installAgentPrompt(record: SessionRecord, key: string): void {
+    this.promptHandles.get(record.sessionId)?.dispose();
+    try {
+      this.promptHandles.set(record.sessionId, installQQPrompt(record.agent.ctx, this.promptEntryData(key)));
+    } catch (error) {
+      this.logger.warn(`QQ prompt 注入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   cwd(scope: ChatScope, peerId: string): string { const entry = this.entry(scope, peerId); return entry.settings?.cwd || (entry.workspaceId ? this.resolveWorkspace(entry.workspaceId).path : entry.policy.cwd || resolveAgentCwd(this.config.cwd)); }
   async send(key: string, operationId: string, text: string, source?: { sessionId: string; messageId: string }): Promise<DeliveryRecord> {
     const entry = this.requireEntry(key);
@@ -819,6 +869,9 @@ export class ConversationService {
   }
   release(_sessionId: string): void {
     // Session history keeps its policy ceiling when reopened through the native UI.
+    // Drop the per-agent prompt sections so a later re-attach reinstalls fresh ones.
+    this.promptHandles.get(_sessionId)?.dispose();
+    this.promptHandles.delete(_sessionId);
   }
 
 }

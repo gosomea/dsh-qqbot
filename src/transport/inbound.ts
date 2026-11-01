@@ -151,6 +151,12 @@ async function executeInbound(ctx: MiddlewareContext, manager: SessionManager, _
   const source = { kind: 'user' as const, qq: { senderId: msg.senderId, senderName, messageId: msg.messageId, conversationKey: entry?.key ?? record.sessionKey, contextPartCount: prefixes.length, ...(background ? {backgroundCursor: background.cursor, backgroundMessageIds: background.messageIds} : {}) } };
   const message = createUserMessage({ content, source });
 
+  // 本轮元信息 → turn-meta runtime context（来源/@/发送者/相对时间）。
+  const msgAt = ((): number => { const n = Number(msg.timestamp); if (Number.isFinite(n) && n > 0) return n < 1e12 ? n * 1000 : n; const p = Date.parse(msg.timestamp); return Number.isFinite(p) ? p : Date.now(); })();
+  service?.setTurnMeta(entry?.key ?? record.sessionKey, {
+    scope, senderName, mentioned: mwState.mention?.wasMentioned === true, at: msgAt, now: Date.now(),
+  });
+
   if (service) {
     const cursor = background?.cursor ?? service.store.snapshotBackground(record.sessionKey, msg.messageId).cursor;
     const row = service.requireEntry(record.sessionKey).sessions.find(item => item.sessionId === record.sessionId);
