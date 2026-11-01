@@ -67,7 +67,8 @@ function PeerRow({ peer, store, t, expanded, showAll, selectedSessionId, onDialo
   const selected = currentSession !== null && currentSession.sessionId === selectedSessionId;
   const sessions = visibleQQSessions(peer, showAll);
   const hasHistory = peer.historySessions.length > 0;
-  const expandable = hasHistory || currentSession !== null;
+  // 只有存在历史会话时才显示展开箭头；仅一条当前会话时点整行即可，无需 chevron，避免与分组头的 chevron 混淆。
+  const expandable = hasHistory;
   const currentTooltip = [name, entry.alias && entry.name ? entry.name : '', currentSession?.title, currentSession?.workspace, currentSession?.path].filter(Boolean).join('\n');
   return h('div', { className: 'imqq-peer' },
     h('div', { className: 'imqq-peerRow', 'data-selected': selected },
