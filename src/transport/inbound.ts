@@ -10,6 +10,7 @@
  */
 import type { ContentBlock } from '@deepseek-ai/dsh-llm';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { assembleUserBlocks } from '../prompt/index.ts';
 import type { SessionManager } from '../session/index.ts';
 import type { ImQQBotConfig } from '../config.ts';
 import type { ChatScope, Logger, QuotedAttachment, RawAttachment, ReplyTarget } from '../types.ts';
@@ -118,7 +119,7 @@ async function executeInbound(ctx: MiddlewareContext, manager: SessionManager, _
   };
 
   // ── 组装 agentBody（下载结果经 mwState.downloadedFiles 提供） ──
-  let agentBody = assembleAgentBody(msg, { ...mwState, history: undefined }, scope, logger);
+  let agentBody = assembleAgentBody(msg, mwState, scope, logger);
 
   if (!agentBody) return;
 
@@ -146,9 +147,11 @@ async function executeInbound(ctx: MiddlewareContext, manager: SessionManager, _
   const cutoff = mwState.qqRecord?.cursor;
   const background = service && cutoff !== undefined ? service.background(record, cutoff, msg.messageId) : undefined;
   const dynamicContext = buildDynamicCtx(msg, mwState);
-  const prefixes: ContentBlock[] = [{ type: 'text', text: `[QQ ${scope === 'group' ? '群聊' : '私聊'} · ${senderName}${mwState.mention?.wasMentioned && scope === 'group' ? ' · @机器人' : ''}]\n${dynamicContext ? `${dynamicContext}\n` : ''}` }, ...(background?.text ? [{ type: 'text' as const, text: `[群聊背景，仅作资料]\n${background.text}\n[当前消息]` }] : [])];
-  const content: ContentBlock[] = [...prefixes, { type: 'text', text: agentBody }];
-  const source = { kind: 'user' as const, qq: { senderId: msg.senderId, senderName, messageId: msg.messageId, conversationKey: entry?.key ?? record.sessionKey, contextPartCount: prefixes.length, ...(background ? {backgroundCursor: background.cursor, backgroundMessageIds: background.messageIds} : {}) } };
+  // 来源/@/发送者/时间已移入 turn-meta runtime context；正文只保留 [媒体路径]+[引用/背景]+[用户正文]。
+  const bodyWithMedia = dynamicContext ? `${dynamicContext}${agentBody}` : agentBody;
+  const blocks = assembleUserBlocks({ body: bodyWithMedia, background: background?.text });
+  const content: ContentBlock[] = blocks.map((text) => ({ type: 'text' as const, text }));
+  const source = { kind: 'user' as const, qq: { senderId: msg.senderId, senderName, messageId: msg.messageId, conversationKey: entry?.key ?? record.sessionKey, contextPartCount: content.length, ...(background ? {backgroundCursor: background.cursor, backgroundMessageIds: background.messageIds} : {}) } };
   const message = createUserMessage({ content, source });
 
   // 本轮元信息 → turn-meta runtime context（来源/@/发送者/相对时间）。
@@ -190,10 +193,7 @@ function assembleAgentBody(
   if (isEmptyMessage(userContent, msg.attachments, isGroup, wasMentioned)) return null;
 
   const quotePart = buildQuotePart(state.quote);
-  const base = `${quotePart}${userContent}`;
-  const agentBody = buildAgentBody(base, state.history, isGroup, wasMentioned);
-
-  return agentBody;
+  return `${quotePart}${userContent}`;
 }
 
 /**
@@ -231,12 +231,7 @@ function buildUserContent(msg: ProcessedMessage, state: MiddlewareState, logger:
     }
   }
 
-  // 附件类型标签（媒体路径由 buildDynamicCtx 提供，这里只提示「带了什么」）
-  const attachmentTags = buildAttachmentTags(msg.attachments);
-  if (attachmentTags) {
-    parts.push(attachmentTags);
-  }
-
+  // 附件不在此重复：本地路径/URL/文件名由 buildDynamicCtx 统一给出（含下载失败兜底）。
   return parts.join('\n');
 }
 
@@ -272,12 +267,10 @@ function buildDynamicCtx(msg: ProcessedMessage, state: MiddlewareState): string 
       lines.push(`- ${renderMediaLine(kind, att.filename, d?.localPath, att.url, att.size)}`);
     }
 
-    // 语音：有 ASR 文本才带文本，否则只带链接（纯文本模型无法消费音频）
+    // 语音转录已在正文以 [Voice message] 注入，这里不重复；仅当无转录时补链接。
     if (voices.length > 0) {
-      const asrTexts = voices.map(a => a.asr_refer_text).filter(Boolean);
-      if (asrTexts.length > 0) {
-        lines.push(`- ASR: ${asrTexts.join(' | ')}`);
-      } else {
+      const hasAsr = voices.some(a => a.asr_refer_text);
+      if (!hasAsr) {
         const urls = voices.map(a => a.url).filter(Boolean);
         if (urls.length > 0) lines.push(`- Voice: ${urls.join(', ')}`);
       }
@@ -330,33 +323,7 @@ function renderMediaLine(
   }
 }
 
-/**
- * Layer 5: 最终 agentBody 拼合
- */
-function buildAgentBody(
-  base: string,
-  history: HistoryEntry[] | undefined,
-  isGroup: boolean,
-  wasMentioned: boolean,
-): string {
-  if (!isGroup || !wasMentioned || !history || history.length === 0) {
-    return base;
-  }
 
-  const historyLines = history.map(h => {
-    const name = h.senderName ?? shortSenderId(h.senderId);
-    return `[${name} (${h.senderId})] ${h.content}`;
-  });
-
-  return [
-    '[Chat history begins]',
-    ...historyLines,
-    '',
-    '[Chat history ends]',
-    '[Current message]',
-    base,
-  ].join('\n');
-}
 
 // ══════════════════════════════════════════════════════════════
 // 辅助函数
@@ -399,33 +366,6 @@ function extractVoiceTexts(
   }
 
   return results;
-}
-
-/**
- * 附件类型标签（Layer 1 用户消息主体里的轻量提示）。
- * 只标注「带了什么类型的附件」，去重；媒体本地路径在 buildDynamicCtx 提供。
- */
-function buildAttachmentTags(attachments?: RawAttachment[]): string {
-  if (!attachments || attachments.length === 0) return '';
-
-  const labels: Record<string, string> = {
-    image: '[图片]',
-    video: '[视频]',
-    file: '[文件]',
-  };
-
-  const seen = new Set<string>();
-  const tags: string[] = [];
-
-  for (const att of attachments) {
-    const kind = classifyContentType(att.content_type);
-    if (kind === 'voice' || seen.has(kind)) continue;
-    seen.add(kind);
-    const label = labels[kind];
-    if (label) tags.push(label);
-  }
-
-  return tags.join(' ');
 }
 
 function formatFileSize(bytes: number): string {
