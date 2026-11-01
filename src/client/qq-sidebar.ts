@@ -94,7 +94,8 @@ function PeerRow({ peer, store, t, expanded, showAll, selectedSessionId, onDialo
     expanded && (hasHistory || currentSession) ? h('div', { className: 'imqq-sessions', 'aria-label': `${name}的会话` },
       currentSession ? h(SessionRow, { key: currentSession.sessionId, session: currentSession, entry, store, t, selected: selectedSessionId === currentSession.sessionId, current: true, onDialog }) : null,
       ...sessions.map((session) => h(SessionRow, { key: session.sessionId, session, entry, store, t, selected: selectedSessionId === session.sessionId, onDialog })),
-      peer.historySessions.length > sessions.length ? h('button', { type: 'button', className: 'imqq-more', onClick: () => store.showAllSessions(entry.key) }, `查看更多历史 · 还有 ${peer.historySessions.length - sessions.length} 条`) : null) : null);
+      showAll && peer.historySessions.length > 0 ? h('button', { type: 'button', className: 'imqq-more', 'aria-expanded': true, onClick: () => store.showAllSessions(entry.key) }, '收起历史') : null,
+      !showAll && peer.historySessions.length > sessions.length ? h('button', { type: 'button', className: 'imqq-more', 'aria-expanded': false, onClick: () => store.showAllSessions(entry.key) }, `查看更多历史 · 还有 ${peer.historySessions.length - sessions.length} 条`) : null) : null);
 }
 
 function SessionRow({ session, entry, store, t, selected, current = false, onDialog }: {

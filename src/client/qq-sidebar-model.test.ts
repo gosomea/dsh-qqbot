@@ -97,7 +97,8 @@ describe('independent QQ sidebar state', () => {
     const store = new QQSessionStore({ openSession });
     const entry = peer();
     store.accept({ conversations: [entry], tools: [], ownerIds: [] });
-    store.setSidebarMode('qq'); store.openSession('old-0'); store.showAllSessions(entry.key); store.setSearch('工作'); store.toggleScope('c2c');
+    // openSession(历史) 会自动展开该 peer（写入 showAllPeers）；无需再手动 showAllSessions。
+    store.setSidebarMode('qq'); store.openSession('old-0'); store.setSearch('工作'); store.toggleScope('c2c');
     const before = store.getSnapshot().sidebar;
     store.accept({ conversations: [{ ...entry, currentSessionId: 'new-current', alias: '改名' }], tools: [], ownerIds: [] });
     expect(store.getSnapshot().sidebar).toBe(before);
@@ -157,5 +158,14 @@ describe('independent QQ sidebar state', () => {
     expect(store.getSnapshot().sidebar.search).toBe('报告');
     store.openSession('old-5');
     expect(store.getSnapshot().sidebar).toMatchObject({ selectedSessionId: 'old-5', search: '', expandedPeers: ['group'], showAllPeers: ['group'] });
+  });
+  it('toggles the full history open and closed for a peer', () => {
+    const store = new QQSessionStore({ openSession: vi.fn() });
+    const entry = peer(); store.accept({ conversations: [entry], tools: [], ownerIds: [] });
+    expect(store.getSnapshot().sidebar.showAllPeers).toEqual([]);
+    store.showAllSessions(entry.key);
+    expect(store.getSnapshot().sidebar.showAllPeers).toEqual(['group']);
+    store.showAllSessions(entry.key); // 再次点击 = 收起
+    expect(store.getSnapshot().sidebar.showAllPeers).toEqual([]);
   });
 });

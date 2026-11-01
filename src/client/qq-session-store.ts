@@ -95,7 +95,11 @@ export class QQSessionStore {
   }
   togglePeer(key: string): void { this.updateSidebar({ expandedPeers: toggleValue(this.state.sidebar.expandedPeers, key) }); }
   toggleScope(scope: QQScope): void { this.updateSidebar({ collapsedScopes: toggleValue(this.state.sidebar.collapsedScopes, scope) }); }
-  showAllSessions(key: string): void { if (!this.state.sidebar.showAllPeers.includes(key)) this.updateSidebar({ showAllPeers: [...this.state.sidebar.showAllPeers, key] }); }
+  /** 展开/收起该会话的完整历史（toggle）。 */
+  showAllSessions(key: string): void {
+    const has = this.state.sidebar.showAllPeers.includes(key);
+    this.updateSidebar({ showAllPeers: has ? this.state.sidebar.showAllPeers.filter(k => k !== key) : [...this.state.sidebar.showAllPeers, key] });
+  }
   setSearch(search: string): void { this.updateSidebar({ search }); }
   installNavigation(navigate: (sessionId: string) => void): () => void {
     this.navigate = navigate;
