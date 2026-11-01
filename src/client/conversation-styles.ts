@@ -52,11 +52,18 @@ export function installConversationStyles(): void {
 .imqc-toolRow:hover { background: var(--dsw-alias-bg-layer-1); }
 .imqc-toolRow[data-on] { border-color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
 .imqc-toolRow[data-off] { opacity: .5; cursor: default; }
+.imqc-toolRowStatic { cursor: default; align-items: center; border-color: var(--dsw-alias-border-l2); }
+.imqc-toolRowStatic:hover { background: transparent; }
+.imqc-toolRowStatic .imqc-toolRowBody { flex: 1; }
+.imqc-toolRemove { flex: none; }
 .imqc-toolRowInput { margin-top: 2px; width: 15px; height: 15px; flex: none; }
 .imqc-toolRowBody { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .imqc-toolRowName { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--dsw-alias-label-primary); }
 .imqc-toolRowDesc { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
 .imqc-toolPickerFoot { margin-top: 12px; }
+/* 工具选择弹窗：默认 Modal 只有 380px，这里放宽以便两列排布 */
+.imqc-toolModal { width: min(760px, calc(100vw - 32px)); max-width: min(760px, calc(100vw - 32px)); }
+.imqc-toolModal > * { min-width: 0; }
 @media (min-width: 560px) { .imqc-toolGrid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
 .imqc-toolGroup { padding: 13px 0; border-bottom: 1px solid var(--dsw-alias-border-l2); }
 .imqc-fieldset { margin: 12px 0; padding: 10px 14px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); }

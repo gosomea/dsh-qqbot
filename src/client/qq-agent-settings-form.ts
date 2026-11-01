@@ -112,8 +112,16 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
         ...TOOL_PRESETS.map(preset => h(Button, { key: preset.id, variant: 'outline', size: 'sm', disabled,
           onClick: () => setTools(preset.tools.filter(id => available.some(tool => tool.id === id && tool.available))) }, preset.label))),
       h('div', { className: 'imqc-field' }, h('span', null, '基础上限'), h(QQSelect, { label: '自定义工具的基础权限', value: execution.permission, options: PERMISSIONS, disabled, onChange: value => { const permission = PERMISSIONS.find(item => item.value === value)?.value; if (permission) setExecution({ ...execution, permission }); } })),
+      h('div', { className: 'imqc-field' }, h('span', null, `已允许的工具（${selected.size}）`),
+        selected.size === 0
+          ? h('p', { className: 'imqc-hint' }, '尚未允许任何工具。点“选择工具”勾选。')
+          : h('div', { className: 'imqc-toolGrid imqc-selectedTools' }, ...available.filter(tool => selected.has(tool.id)).map(tool => h('div', { className: 'imqc-toolRow imqc-toolRowStatic', key: tool.id, title: tool.description || undefined },
+              h('span', { className: 'imqc-toolRowBody' },
+                h('span', { className: 'imqc-toolRowName' }, tool.name, tool.id !== tool.name ? h('small', { className: 'imqc-hint' }, tool.id) : null),
+                tool.description ? h('span', { className: 'imqc-toolRowDesc' }, tool.description) : null),
+              h(Button, { variant: 'ghost', size: 'sm', className: 'imqc-toolRemove', disabled, 'aria-label': `移除${tool.name}`, onClick: () => setTools([...selected].filter(id => id !== tool.id)) }, '移除'))))),
       h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => setToolsOpen(true) }, `选择工具（已选 ${selected.size} 项）`),
-      toolsOpen ? h(Modal, { open: true, title: '选择可用工具', closeLabel: '关闭工具选择', onClose: () => setToolsOpen(false), children: h('div', { className: 'imqc imqc-toolPicker' },
+      toolsOpen ? h(Modal, { open: true, title: '选择可用工具', closeLabel: '关闭工具选择', className: 'imqc-toolModal', onClose: () => setToolsOpen(false), children: h('div', { className: 'imqc imqc-toolPicker' },
       h('div', { className: 'imqc-toolPickerBar' },
         h(Input, { type: 'search', value: query, disabled, placeholder: '搜索工具名称或标识', 'aria-label': '搜索工具', onChange: (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value) }),
         h('div', { className: 'imqc-inline' }, h('span', { className: 'imqc-hint' }, `已选 ${selected.size} 项`),
