@@ -99,6 +99,7 @@ export type ConversationAction =
   | { action: 'defaults'; expectedVersion: number; settings: QQAgentSettings }
   | { action: 'settings'; key: string; expectedVersion: number; settings: QQAgentSettings; alias: string; receiveEnabled: boolean; recording?: { expectedVersion: number; maxMessages: number } }
   | { action: 'recording'; key: string; expectedVersion: number; enabled: boolean; retentionDays: number; maxMessages?: number }
+  | { action: 'clear-records'; key: string }
   | { action: 'timeline'; key: string; before?: number; snapshot?: number; after?: number; query?: string; limit?: number }
   | { action: 'create-session'; key: string; operationId: string; expectedCurrentSessionId: string | null; expectedPolicyVersion: number; workspaceId: string; presetId: string }
   | { action: 'unarchive'; key: string; sessionId: string }

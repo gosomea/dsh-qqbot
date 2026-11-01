@@ -62,6 +62,14 @@ function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selec
   }, [dirty, settingsConflict, recordingConflict, entry, settings]);
   const patch = (next: Partial<PeerDraft>): void => { setRetained(value => ({ ...value, draft: { ...value.draft, ...next } })); setError(''); setNotice(''); };
   const discard = (): void => { const value = current(entry, settings); setRetained({ draft: value, base: value }); drafts.delete(entry.key); setError(''); setNotice(''); };
+  const clearRecords = (): void => {
+    if (pending.current) return;
+    if (typeof window !== 'undefined' && !window.confirm('确定清空此对话的全部消息记录？此操作不可撤销（不影响 QQ 会话与去重）。')) return;
+    pending.current = true; setBusy(true); setError(''); setNotice('');
+    void store.perform({ action: 'clear-records', key: entry.key }).then(() => { if (mounted.current) setNotice('消息记录已清空。'); })
+      .catch((cause: unknown) => { if (mounted.current) setError(cause instanceof Error ? cause.message : '清空失败'); })
+      .finally(() => { pending.current = false; if (mounted.current) setBusy(false); });
+  };
   const admit = (): void => {
     if (pending.current) return;
     pending.current = true; setBusy(true); setError(''); setNotice('');
@@ -96,9 +104,10 @@ function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selec
     h('label', { className: 'imqc-field' }, h('span', null, 'QQ 备注'), h(Input, { value: draft.alias, maxLength: 100, disabled: busy, 'aria-label': 'QQ 备注', onChange: (event: ChangeEvent<HTMLInputElement>) => patch({ alias: event.target.value }) })),
     h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, commands, chatScope: entry.scope, onPickDirectory: selectorSource.pickDirectory, workspaces, onCreateWorkspace: selectorSource.createWorkspace, defaultWorkspaceName, defaultCwd, disabled: busy, onChange: value => patch({ settings: value }), onRefreshCatalog: catalog.refresh,
       askTools: Object.entries(entry.policy.tools).filter(([, decision]) => decision === 'ask').map(([id]) => id) }),
-    h('label', { className: 'imqc-field' }, h('span', null, t('peer.retain.label')), h(Input, { type: 'number', min: 0, max: 1_000_000, step: 1, value: draft.maxMessages, disabled: busy || !entry.recording, 'aria-label': t('peer.retain.label'), onChange: (event: ChangeEvent<HTMLInputElement>) => patch({ maxMessages: Number(event.target.value), countEdited: true }) })),
-    h('p', { className: 'imqc-hint' }, t('peer.retain.hint')),
-    entry.recording?.retentionDays ? h('p', { className: 'imqc-hint' }, t('peer.retain.legacyDays', { days: entry.recording.retentionDays })) : null,
+    // 消息记录默认全部保留、不自动清理；提供手动清空入口。
+    h('div', { className: 'imqc-inline' },
+      h('span', { className: 'imqc-hint' }, '消息记录会全部保留，不会自动清理。'),
+      h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: clearRecords }, '清空消息记录')),
     entry.recordingError ? h('p', { role: 'alert', className: 'imqc-error' }, entry.recordingError) : null,
     h('p', { className: 'imqc-hint' }, t('peer.deferred.hint')),
     entry.running ? h('p', { role: 'status', className: 'imqc-hint' }, '任务运行中，可继续编辑草稿；任务结束后再保存会话设置。消息记录数量可独立保存。') : null,

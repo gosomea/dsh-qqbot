@@ -61,6 +61,8 @@ export function registerConversationRoutes(ctx: Context, service: ConversationSe
             if (body.maxMessages !== undefined && (!Number.isSafeInteger(body.maxMessages) || Number(body.maxMessages) < 0 || Number(body.maxMessages) > 1_000_000)) throw new Error('记录条数无效');
             service.store.updateRecording(key, Number(body.expectedVersion), { enabled: body.enabled, retentionDays: Number(body.retentionDays), ...(body.maxMessages === undefined ? {} : { maxMessages: Number(body.maxMessages) }) });
             service.pruneExpired();
+          } else if (action === 'clear-records') {
+            service.store.clearRecords(key);
           } else if (action === 'timeline') {
             for (const name of ['before', 'after', 'snapshot', 'limit']) if (body[name] !== undefined && (!Number.isSafeInteger(body[name]) || Number(body[name]) < 0)) throw new Error('时间线分页参数无效');
             if (body.query !== undefined && (typeof body.query !== 'string' || body.query.length > 2000)) throw new Error('查询文字无效');

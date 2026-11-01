@@ -5,7 +5,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client';
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives';
 import { presetDisplayText } from '@deepseek-ai/dsh-agent-preset-registry/display';
 import type { AgentPresetRow } from '@deepseek-ai/dsh-agent-preset-registry/types';
-import { createElement, useEffect, useState, type ReactNode } from 'react';
+import { createElement, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { SessionId } from '@deepseek-ai/dsh-session/types';
 import { BindPanelBody, useBindState, QQ_BOT_LOGO_PATH, installPanelStyles } from './bind-page.ts';
 import { ConfigPanel } from './config-panel.ts';
@@ -40,13 +40,12 @@ interface SlotsLike {
   register(spec: Record<string, unknown>, component: unknown): () => void;
 }
 
-/** 工作区快照订阅 hook（取自 slot 运行时 props）。 */
-type UseWorkspacesHook = (selector: (snapshot: { items: ReadonlyArray<{ workspaceId: string; title: string; path: string }> }) => ReadonlyArray<{ workspaceId: string; title: string; path: string }>) => ReadonlyArray<{ workspaceId: string; title: string; path: string }>;
+type WorkspaceItem = { workspaceId: string; title: string; path: string };
+const EMPTY_WORKSPACES: ReadonlyArray<WorkspaceItem> = [];
 
 /** 设置页栏目：共享一份绑定状态轮询，驱动绑定面板与配置刷新 */
-function QQBotSettingsSection({ selectorSource, store, t, useWorkspaces, defaultWorkspaceName }: { selectorSource: SelectorSource; store: QQSessionStore; t: QQTranslate; useWorkspaces?: UseWorkspacesHook; defaultWorkspaceName: string }): ReactNode {
+function QQBotSettingsSection({ selectorSource, store, t, workspaces, defaultWorkspaceName }: { selectorSource: SelectorSource; store: QQSessionStore; t: QQTranslate; workspaces: ReadonlyArray<WorkspaceItem>; defaultWorkspaceName: string }): ReactNode {
   const { state, gone, error, recheck } = useBindState();
-  const workspaces = useWorkspaces ? useWorkspaces((snapshot) => snapshot.items) : [];
   // 单页两卡：账号与访问（凭据 / 服务范围 / 所有者，均"保存即重载插件"）与新对话默认值（版本化即时生效）。
   return createElement('div', { className: 'imqb-cards' },
     createElement('section', { className: 'imqb-card', 'aria-label': t('account.title') },
@@ -61,10 +60,10 @@ function QQBotSettingsSection({ selectorSource, store, t, useWorkspaces, default
 }
 
 /** 主面板页面：与设置栏目同一内容，包一层滚动留白容器（plugins.detail.actions 的跳转目标） */
-function QQBotPage({ selectorSource, store, t, initialSettings, installSettingsHandler, useWorkspaces, defaultWorkspaceName }: {
+function QQBotPage({ selectorSource, store, t, initialSettings, installSettingsHandler, workspaces, defaultWorkspaceName }: {
   selectorSource: SelectorSource; store: QQSessionStore; t: QQTranslate;
   initialSettings: () => boolean; installSettingsHandler: (handler: (() => void) | undefined) => void;
-  useWorkspaces?: UseWorkspacesHook; defaultWorkspaceName: string;
+  workspaces: ReadonlyArray<WorkspaceItem>; defaultWorkspaceName: string;
 }): ReactNode {
   const [settings, setSettings] = useState(initialSettings);
   useEffect(() => { installSettingsHandler(() => setSettings(true)); return () => installSettingsHandler(undefined); }, [installSettingsHandler]);
@@ -75,7 +74,7 @@ function QQBotPage({ selectorSource, store, t, initialSettings, installSettingsH
       createElement(Button, { variant: 'outline', size: 'sm', onClick: () => setSettings(false) }, '‹ 返回 QQ 会话'),
       createElement('h1', { className: 'imqb-pageTitle' }, 'QQ 机器人'),
       createElement('p', { className: 'imqb-pageDescription' }, '管理机器人账号、可对话范围与新对话默认值'),
-      createElement(QQBotSettingsSection, { selectorSource, store, t, useWorkspaces, defaultWorkspaceName }))) : null,
+      createElement(QQBotSettingsSection, { selectorSource, store, t, workspaces, defaultWorkspaceName }))) : null,
   );
 }
 
@@ -131,12 +130,21 @@ export function apply(ctx: Context): void {
   };
   const store = new QQSessionStore(ctx.uiWorkspace);
   const defaultWorkspaceName = ctx.locale.bind('common')('workspace.defaultName');
-  const SettingsSection = (props: { useWorkspaces?: UseWorkspacesHook }): ReactNode => createElement(QQBotSettingsSection, { selectorSource, store, t, useWorkspaces: props?.useWorkspaces, defaultWorkspaceName });
+  // settings.section slot 不提供 useWorkspaces；直接订阅 workspaces 服务的工作区列表。
+  const workspacesSource = (ctx as unknown as { get?: (name: string) => unknown }).get?.('workspaces') as { list?: { getSnapshot(): { items: ReadonlyArray<WorkspaceItem> }; subscribe(listener: () => void): () => void } } | undefined;
+  const useWorkspacesList = (): ReadonlyArray<WorkspaceItem> => {
+    const list = workspacesSource?.list;
+    return useSyncExternalStore(
+      (listener) => list ? list.subscribe(listener) : () => {},
+      () => list ? list.getSnapshot().items : EMPTY_WORKSPACES,
+    );
+  };
+  const SettingsSection = (): ReactNode => createElement(QQBotSettingsSection, { selectorSource, store, t, workspaces: useWorkspacesList(), defaultWorkspaceName });
   let settingsRequested = false;
   let showSettings: (() => void) | undefined;
   const installSettingsHandler = (handler: (() => void) | undefined): void => { showSettings = handler; };
   const initialSettings = (): boolean => { const value = settingsRequested; settingsRequested = false; return value; };
-  const MainPage = (props: { useWorkspaces?: UseWorkspacesHook }): ReactNode => createElement(QQBotPage, { selectorSource, store, t, initialSettings, installSettingsHandler, useWorkspaces: props?.useWorkspaces, defaultWorkspaceName });
+  const MainPage = (): ReactNode => createElement(QQBotPage, { selectorSource, store, t, initialSettings, installSettingsHandler, workspaces: useWorkspacesList(), defaultWorkspaceName });
   const slots = (ctx as unknown as { slots?: SlotsLike }).slots;
 
   const disposers: Array<() => void> = [];
