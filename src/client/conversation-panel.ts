@@ -42,7 +42,7 @@ export function ConversationPanel({ onOpenSettings, store }: ConversationPanelPr
       h(Button, { variant: 'outline', size: 'sm', onClick: onOpenSettings }, '账号设置')));
 }
 
-export function QQAccountOwners({ store }: { store: QQSessionStore }): ReactNode {
+export function QQAccountOwners({ store, t }: { store: QQSessionStore; t?: import('./qq-locale.ts').QQTranslate }): ReactNode {
   const directory = useQQSessionStore(store);
   const [ownersOpen, setOwnersOpen] = useState(false);
   const [owners, setOwners] = useState('');
@@ -50,9 +50,12 @@ export function QQAccountOwners({ store }: { store: QQSessionStore }): ReactNode
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const ready = directory.directory !== null && !directory.loading && directory.error === null;
-  return h('section', { className: 'imqc', 'aria-label': 'QQ 所有者' }, h('h3', null, 'QQ 所有者'),
-    h('p', { className: 'imqc-hint' }, ready ? `${directory.directory?.ownerIds.length} 个所有者 OpenID。所有者可管理群聊和私聊的授权。` : directory.error ? '无法读取所有者名单，请刷新后重试。' : '正在读取所有者名单…'),
-    h(Button, { variant: 'outline', size: 'sm', disabled: busy || !ready, onClick: () => { setOwnersOpen(!ownersOpen); setOwners((directory.directory?.ownerIds ?? []).join('\n')); } }, ownersOpen ? '取消编辑' : '编辑所有者'),
+  const title = t ? t('owners.title') : '斜杠命令超管';
+  const count = directory.directory?.ownerIds.length ?? 0;
+  return h('section', { className: 'imqc', 'aria-label': title }, h('h3', null, title),
+    h('p', { className: 'imqc-hint' }, ready ? (t ? t('owners.count', { count }) : `${count} 个 OpenID。斜杠命令超管见下方说明。`) : directory.error ? '无法读取所有者名单，请刷新后重试。' : '正在读取所有者名单…'),
+    h('p', { className: 'imqc-hint' }, t ? t('owners.hint') : '在任何 QQ 会话里都能使用斜杠命令（含 /model、/preset、/permission 等改动类命令）、审批工具调用、回答机器人提问与中止任务。它不开放工具、也不绕过执行权限——工具与权限仍在会话设置里配置。'),
+    h(Button, { variant: 'outline', size: 'sm', disabled: busy || !ready, onClick: () => { setOwnersOpen(!ownersOpen); setOwners((directory.directory?.ownerIds ?? []).join('\n')); } }, ownersOpen ? '取消编辑' : '编辑名单'),
     ownersOpen ? h('div', { className: 'imqc-preview' }, h('p', { className: 'imqc-hint' }, 'QQ 所有者 OpenID，每行一个'),
       h('textarea', { rows: 3, disabled: busy || !ready, value: owners, 'aria-label': '机器人所有者 OpenID', onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setOwners(event.target.value) }),
       error ? h('p', { className: 'imqc-error', role: 'alert' }, error) : null,

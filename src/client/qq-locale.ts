@@ -35,6 +35,12 @@ export const ZH = {
   'defaults.title': '新对话默认值',
   'defaults.hint': '之后首次接入的群聊和私聊复制这些设置。保存立即生效，不改动已接入的对话，也不会重载插件。',
   'defaults.save': '保存默认设置（即时生效）',
+  // 账号与访问卡 + 斜杠命令超管（点 A）
+  'account.title': '账号与访问',
+  'account.hint': '这一栏决定外部 QQ 用户能否触发本机 DSH、以及谁算管理员，只能在 DSH Web 配置。DSH 本身没有白名单——能打开本页面的人就是本机操作者。',
+  'owners.title': '斜杠命令超管',
+  'owners.hint': '在任何 QQ 会话里都能使用斜杠命令（含 /model、/preset、/permission 等改动类命令）、审批工具调用、回答机器人提问与中止任务。它不开放工具、也不绕过执行权限——工具与权限仍在会话设置里配置。',
+  'owners.count': '{count} 个 OpenID。斜杠命令超管见下方说明。',
 } as const;
 
 export type QQBotKey = keyof typeof ZH;
@@ -58,6 +64,11 @@ const EN: QQBotDict = {
   'defaults.title': 'New-conversation defaults',
   'defaults.hint': 'Newly admitted group and private chats copy these settings. Saving takes effect immediately, leaves admitted chats unchanged, and does not reload the plugin.',
   'defaults.save': 'Save defaults (instant)',
+  'account.title': 'Account & access',
+  'account.hint': 'This section decides whether external QQ users can drive this local DSH, and who counts as an admin. It is configured only in DSH Web. DSH itself has no allowlist — anyone who can open this page is the local operator.',
+  'owners.title': 'Slash-command superadmin',
+  'owners.hint': 'Can use slash commands in any QQ chat (including mutating ones like /model, /preset, /permission), approve tool calls, answer bot questions, and stop tasks. This does not open tools or bypass execution permission — tools and permissions are configured in each chat settings.',
+  'owners.count': '{count} OpenID(s). See the note below for what slash-command superadmin can do.',
 };
 
 /** 注册 qqbot 命名空间（在 apply 的 effect 内调用；返回 disposer）。 */

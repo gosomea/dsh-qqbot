@@ -1,4 +1,5 @@
 import type { ConversationSandboxMode } from './conversation-protocol.ts';
+import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 
 export type QQExecutionSettings =
   | { kind: 'native'; permission: ConversationSandboxMode }
@@ -6,7 +7,7 @@ export type QQExecutionSettings =
 
 export interface QQAgentSettings {
   preset: string;
-  model: { provider: string; model: string } | null;
+  model: { provider: string; model: string; reasoningEffort?: import('@deepseek-ai/dsh-llm').ReasoningEffortId } | null;
   prompt: string;
   cwd: string;
   execution: QQExecutionSettings;
@@ -53,7 +54,8 @@ export function validateQQAgentSettings(value: unknown): QQAgentSettings {
     const provider = text(route.provider, '模型提供方', 256).trim();
     const id = text(route.model, '模型标识', 1024).trim();
     if (!provider || !id) throw new TypeError('模型选择无效');
-    model = { provider, model: id };
+    const reasoningEffort = route.reasoningEffort === undefined || route.reasoningEffort === null ? undefined : text(route.reasoningEffort, '推理强度', 64).trim();
+    model = { provider, model: id, ...(reasoningEffort ? { reasoningEffort: reasoningEffort as ReasoningEffortId } : {}) };
   }
   const cwd = text(data.cwd, '工作目录', 4096).trim();
   if (cwd && !cwd.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(cwd)) throw new TypeError('工作目录必须使用绝对路径');

@@ -2,6 +2,7 @@ import { createElement as h, useState, type ChangeEvent, type ReactNode } from '
 import { Button, Checkbox, Input, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { QQAgentSettings, QQExecutionSettings } from '../shared/agent-settings.ts';
 import type { ConversationSandboxMode, SlashCommandDescriptor, ToolCatalogEntry } from '../shared/conversation-protocol.ts';
+import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { defaultModelLabel, defaultPresetLabel, findModel, modelChoiceId, modelLabel, presetLabel } from './host-selectors.ts';
 import type { QQAgentCatalog } from './qq-agent-catalog.ts';
 import { QQSelect, type QQSelectOption } from './qq-controls.ts';
@@ -12,6 +13,12 @@ const PERMISSIONS: ReadonlyArray<{ value: ConversationSandboxMode; label: string
   { value: 'danger-full-access', label: '完全权限' },
 ];
 const CATEGORIES: Record<ToolCatalogEntry['category'], string> = { file: '文件', search: '搜索', network: '联网', execution: '命令与代码', mcp: 'MCP', attachment: '附件与交付', other: '其他' };
+
+/** 只读工具模板：只勾选"不会改动文件/不执行命令"的只读工具，且仅对当前目录实际可用的工具生效。 */
+const TOOL_PRESETS: ReadonlyArray<{ id: string; label: string; tools: readonly string[] }> = [
+  { id: 'read-files', label: '只读：文件与搜索', tools: ['read', 'read_image', 'grep', 'glob', 'qqbot_group_history'] },
+  { id: 'read-web', label: '只读 + 网页', tools: ['read', 'read_image', 'grep', 'glob', 'qqbot_group_history', 'web_search', 'web_fetch'] },
+];
 
 export interface QQAgentSettingsFormProps {
   readonly settings: QQAgentSettings;
@@ -25,12 +32,16 @@ export interface QQAgentSettingsFormProps {
   readonly commands?: readonly SlashCommandDescriptor[];
   /** Open the Host directory picker to fill the working directory; omitted hides the browse button. */
   readonly onPickDirectory?: () => Promise<string | null>;
+  /** Which surface hosts this shared form; only changes tool-area copy. Defaults to 'conversation'. */
+  readonly scope?: 'defaults' | 'conversation';
 }
 
 /** Draft fields only. The parent owns persistence, versions and conflict handling. */
-export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
+export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, scope = 'conversation', onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
   const [query, setQuery] = useState('');
   const [toolsOpen, setToolsOpen] = useState(false);
+  // 首次进入"自定义工具"时的一次性引导（本组件实例内记忆，不写库）。
+  const [toolGuideDismissed, setToolGuideDismissed] = useState(false);
   const execution = settings.execution;
   const model = settings.model;
   const modelOptions: QQSelectOption[] = [{ value: 'inherit', label: defaultModelLabel(catalog.models) }];
@@ -45,12 +56,24 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
   const visible = available.filter(tool => `${tool.name} ${tool.id} ${tool.description}`.toLocaleLowerCase().includes(search));
   const setExecution = (next: QQExecutionSettings): void => onChange({ ...settings, execution: next });
   const setTools = (values: Iterable<string>): void => setExecution({ kind: 'custom', permission: execution.permission, tools: [...new Set(values)].sort() });
+  const currentChoice = model ? findModel(catalog.models, model) : undefined;
+  const effortOptions: QQSelectOption[] = (currentChoice?.efforts ?? []).map(effort => ({ value: effort.id, label: effort.name, ...(effort.description === undefined ? {} : { description: effort.description }) }));
+  const showEffort = effortOptions.length > 0;
+  const selectedEffort = model?.reasoningEffort ?? currentChoice?.defaultEffort ?? effortOptions[0]?.value ?? '';
+  const setModelWithEffort = (next: QQAgentSettings['model']): void => {
+    if (next === null) { onChange({ ...settings, model: null }); return; }
+    const choice = findModel(catalog.models, next);
+    const efforts = choice?.efforts ?? [];
+    const effort = next.reasoningEffort ?? choice?.defaultEffort ?? efforts[0]?.id;
+    onChange({ ...settings, model: { provider: next.provider, model: next.model, ...(effort ? { reasoningEffort: effort as ReasoningEffortId } : {}) } });
+  };
   return h('div', { className: 'imqc-agentSettings' },
     h('div', { className: 'imqc-field' }, h('span', null, '模型'), h(QQSelect, { label: '模型', value: model ? modelChoiceId(model) : 'inherit', options: modelOptions, disabled, onOpen: onRefreshCatalog, onChange: value => {
       if (value === 'inherit') { onChange({ ...settings, model: null }); return; }
       const choice = catalog.models?.groups.flatMap(group => group.models).find(candidate => modelChoiceId(candidate) === value);
-      if (choice) onChange({ ...settings, model: { provider: choice.provider, model: choice.model } });
+      if (choice) setModelWithEffort({ provider: choice.provider, model: choice.model });
     } })),
+    showEffort ? h('div', { className: 'imqc-field' }, h('span', null, '推理强度'), h(QQSelect, { label: '推理强度', value: selectedEffort, options: effortOptions, disabled, onChange: effort => { if (model) onChange({ ...settings, model: { ...model, reasoningEffort: effort as ReasoningEffortId } }); } })) : null,
     h('div', { className: 'imqc-field' }, h('span', null, 'Agent 预设'), h(QQSelect, { label: 'Agent 预设', value: settings.preset, options: presetOptions, disabled, onOpen: onRefreshCatalog, onChange: preset => onChange({ ...settings, preset }) })),
     h('p', { className: 'imqc-hint' }, 'Agent 预设决定使用哪个 Agent；执行权限决定该 Agent 可执行的操作。'),
     h('div', { className: 'imqc-field' }, h('span', null, '执行权限'), h(QQSelect, { label: '执行权限', value: execution.kind === 'custom' ? 'custom' : execution.permission, disabled, options: [...PERMISSIONS, { value: 'custom', label: '自定义工具' }], onChange: value => {
@@ -58,9 +81,14 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
       const permission = PERMISSIONS.find(item => item.value === value)?.value;
       if (permission) setExecution({ kind: 'native', permission });
     } })),
-    execution.kind === 'native' ? h('p', { className: 'imqc-hint' }, '使用所选 Agent 的实际工具，并遵循 DSH 原生权限。') : h('section', { className: 'imqc-fieldset imqc-customTools', 'aria-label': '自定义工具集' },
-      h('div', { className: 'imqc-fieldsetTitle' }, '自定义工具集'),
-      h('p', { className: 'imqc-hint' }, '仅开放下方勾选的工具；基础权限是这些工具之上的上限，文件、命令和网络操作仍受其限制，已有额外审批规则保留。'),
+    execution.kind === 'native' ? h('p', { className: 'imqc-hint' }, '使用所选 Agent 的实际工具，并遵循 DSH 原生权限。') : h('section', { className: 'imqc-fieldset imqc-customTools', 'aria-label': scope === 'defaults' ? '允许的工具（新对话默认）' : '本对话允许的工具' },
+      h('div', { className: 'imqc-fieldsetTitle' }, scope === 'defaults' ? '允许的工具（新对话默认）' : '本对话允许的工具'),
+      !toolGuideDismissed ? h('div', { className: 'imqc-toolGuide' }, h('p', null, scope === 'defaults' ? '这里的勾选只决定之后新接入对话的初始工具；已接入的对话各自独立。' : '这里的勾选只对当前这个群/联系人生效，其它群各自独立。'),
+        h(Button, { variant: 'ghost', size: 'sm', onClick: () => setToolGuideDismissed(true) }, '知道了')) : null,
+      h('p', { className: 'imqc-hint' }, '只开放下方勾选的工具；基础权限是这些工具之上的上限，文件、命令和网络操作仍受其限制，已有额外审批规则保留。'),
+      h('div', { className: 'imqc-inline imqc-presets' }, h('span', { className: 'imqc-hint' }, '快速模板：'),
+        ...TOOL_PRESETS.map(preset => h(Button, { key: preset.id, variant: 'outline', size: 'sm', disabled,
+          onClick: () => setTools(preset.tools.filter(id => available.some(tool => tool.id === id && tool.available))) }, preset.label))),
       h('div', { className: 'imqc-field' }, h('span', null, '基础上限'), h(QQSelect, { label: '自定义工具的基础权限', value: execution.permission, options: PERMISSIONS, disabled, onChange: value => { const permission = PERMISSIONS.find(item => item.value === value)?.value; if (permission) setExecution({ ...execution, permission }); } })),
       h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => setToolsOpen(true) }, `选择工具（已选 ${selected.size} 项）`),
       toolsOpen ? h(Modal, { open: true, title: '选择可用工具', closeLabel: '关闭工具选择', onClose: () => setToolsOpen(false), children: h('div', { className: 'imqc' },

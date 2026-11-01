@@ -45,12 +45,12 @@ function QQBotSettingsSection({ selectorSource, store, t }: { selectorSource: Se
   const { state, gone, error, recheck } = useBindState();
   // 单页两卡：账号与访问（凭据 / 服务范围 / 所有者，均"保存即重载插件"）与新对话默认值（版本化即时生效）。
   return createElement('div', { className: 'imqb-cards' },
-    createElement('section', { className: 'imqb-card', 'aria-label': '账号与访问' },
-      createElement('h2', { className: 'imqb-cardTitle' }, '账号与访问'),
-      createElement('p', { className: 'imqb-cardHint' }, '机器人凭据、可对话的对象范围与管理员。此处的保存会重载插件，并中断正在运行的 QQ 任务。'),
+    createElement('section', { className: 'imqb-card', 'aria-label': t('account.title') },
+      createElement('h2', { className: 'imqb-cardTitle' }, t('account.title')),
+      createElement('p', { className: 'imqb-cardHint' }, t('account.hint')),
       createElement(BindPanelBody, { state, gone, error, recheck }),
       createElement(ConfigPanel, { bindPhase: state?.phase, selectorSource, t }),
-      createElement(QQAccountOwners, { store })),
+      createElement(QQAccountOwners, { store, t })),
     createElement('section', { className: 'imqb-card', 'aria-label': '新对话默认值' },
       createElement(QQDefaultsSettings, { store, selectorSource, t })),
   );

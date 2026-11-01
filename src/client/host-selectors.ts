@@ -7,11 +7,16 @@ export interface SelectorSource {
   pickDirectory?(): Promise<string | null>;
 }
 
+export interface ModelReasoningEffort { id: string; name: string; description?: string }
 export interface ModelChoice {
   provider: string;
   model: string;
   name: string;
   description: string | undefined;
+  /** Selectable reasoning efforts for this exact route; empty when the model has none. */
+  efforts: readonly ModelReasoningEffort[];
+  /** Host-advised default effort; undefined when the model has no reasoning control. */
+  defaultEffort: string | undefined;
 }
 
 export interface ModelGroup {
@@ -95,7 +100,16 @@ export function parseModelCatalog(response: unknown): ModelDirectory {
         continue;
       }
       seenModels.add(modelId);
-      models.push({ provider: id, model: modelId, name: text(model.name) ?? modelId, description: text(model.description) });
+      const reasoning = record(model.reasoning);
+      const efforts: ModelReasoningEffort[] = Array.isArray(reasoning?.efforts)
+        ? reasoning.efforts.flatMap((candidateEffort) => {
+            const effort = record(candidateEffort);
+            const effortId = text(effort?.id);
+            if (effort === undefined || effortId === undefined) return [];
+            return [{ id: effortId, name: text(effort.name) ?? effortId, ...(text(effort.description) === undefined ? {} : { description: text(effort.description) }) }];
+          })
+        : [];
+      models.push({ provider: id, model: modelId, name: text(model.name) ?? modelId, description: text(model.description), efforts, defaultEffort: text(reasoning?.defaultEffort) });
     }
     groups.push({ id, name: text(group.name) ?? id, models });
   }

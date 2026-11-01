@@ -50,7 +50,7 @@ function DefaultsSettingsDraft({ store, selectorSource, defaults, t, tools, comm
   return h('section', { className: 'imqc imqc-defaultsSettings', 'aria-label': ttl, 'aria-busy': busy },
     h('h3', { className: 'imqb-cardTitle' }, ttl),
     h('p', { className: 'imqb-cardHint' }, t ? t('defaults.hint') : '之后首次接入的群聊和私聊复制这些设置。保存立即生效，不改动已接入的对话，也不会重载插件。'),
-    h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, commands, onPickDirectory: selectorSource.pickDirectory, disabled: busy, onRefreshCatalog: catalog.refresh, onChange: settings => { setRetained(value => ({ ...value, draft: { ...value.draft, settings } })); setError(''); setNotice(''); } }),
+    h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, commands, scope: 'defaults', onPickDirectory: selectorSource.pickDirectory, disabled: busy, onRefreshCatalog: catalog.refresh, onChange: settings => { setRetained(value => ({ ...value, draft: { ...value.draft, settings } })); setError(''); setNotice(''); } }),
     conflict && dirty ? h('p', { role: 'alert', className: 'imqc-error' }, '默认设置已在其他位置更新。草稿保留，请放弃修改以载入最新设置。') : null,
     error ? h('p', { role: 'alert', className: 'imqc-error' }, error) : null,
     notice ? h('p', { role: 'status', className: 'imqc-hint' }, notice) : null,

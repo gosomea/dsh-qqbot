@@ -11,11 +11,11 @@ describe('QQ account controls', () => {
     const store = new QQSessionStore({ openSession: () => {} });
     const loading = renderToStaticMarkup(h(QQAccountOwners, { store }));
     expect(loading).toContain('正在读取所有者名单');
-    expect(loading).not.toContain('0 个所有者');
-    expect(loading).toMatch(/<button[^>]*disabled=""[^>]*>编辑所有者/);
+    expect(loading).not.toContain('0 个 OpenID');
+    expect(loading).toMatch(/<button[^>]*disabled=""[^>]*>编辑名单/);
     store.accept({ conversations: [], tools: [], ownerIds: [] });
     const ready = renderToStaticMarkup(h(QQAccountOwners, { store }));
-    expect(ready).toContain('0 个所有者');
+    expect(ready).toContain('0 个 OpenID');
     expect(ready).not.toContain('disabled=""');
   });
   it('keeps owner editing disabled after a directory read failure', async () => {
@@ -26,8 +26,8 @@ describe('QQ account controls', () => {
       await vi.waitFor(() => expect(store.getSnapshot().error).toBe('离线目录错误'));
       const markup = renderToStaticMarkup(h(QQAccountOwners, { store }));
       expect(markup).toContain('无法读取所有者名单');
-      expect(markup).not.toContain('0 个所有者');
-      expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>编辑所有者/);
+      expect(markup).not.toContain('0 个 OpenID');
+      expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>编辑名单/);
     } finally { stop(); }
   });
   it('preserves direct credential and unbind entry points without performing either action', () => {

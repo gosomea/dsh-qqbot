@@ -12,6 +12,21 @@ describe('host settings selector directories', () => {
     expect(() => parsePermissionCatalog({ ok: true, value: { options: [{ value: 3 }] } })).toThrow('无效');
   });
 
+  it('parses per-model reasoning efforts and default effort from the host catalog', () => {
+    const directory = parseModelCatalog(catalog([
+      { id: 'first', name: 'P', models: [
+        { id: 'think', name: 'Think', reasoning: { efforts: [{ id: 'off', name: 'Off' }, { id: 'high', name: 'High', description: 'more' }], defaultEffort: 'high' } },
+        { id: 'plain', name: 'Plain' },
+      ] },
+    ]));
+    const think = findModel(directory, { provider: 'first', model: 'think' });
+    expect(think?.efforts.map((effort) => effort.id)).toEqual(['off', 'high']);
+    expect(think?.defaultEffort).toBe('high');
+    expect(findModel(directory, { provider: 'first', model: 'plain' })?.efforts).toEqual([]);
+    expect(findModel(directory, { provider: 'first', model: 'plain' })?.defaultEffort).toBeUndefined();
+    expect(findModel(directory, { provider: 'first', model: 'think' })?.efforts.find((effort) => effort.id === 'high')?.description).toBe('more');
+  });
+
   it('keeps provider identities separate when model ids are identical', () => {
     const directory = parseModelCatalog(catalog([
       { id: 'first', name: 'First provider', models: [{ id: 'shared', name: 'First model', description: 'First description' }] },
@@ -32,7 +47,7 @@ describe('host settings selector directories', () => {
     ], [{ id: 'offline', name: 'Offline provider', message: 'Connection failed' }]));
 
     expect(directory.groups).toHaveLength(1);
-    expect(directory.groups[0]?.models).toEqual([{ provider: 'first', model: 'shared', name: 'shared', description: undefined }]);
+    expect(directory.groups[0]?.models).toEqual([{ provider: 'first', model: 'shared', name: 'shared', description: undefined, efforts: [], defaultEffort: undefined }]);
     expect(directory.failures.join('；')).toContain('格式无效或重复');
     expect(directory.failures).toContain('Offline provider：Connection failed');
   });
