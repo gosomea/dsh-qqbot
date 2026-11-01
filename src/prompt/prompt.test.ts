@@ -88,11 +88,8 @@ describe('turn meta', () => {
 });
 
 describe('user blocks', () => {
-  it('orders quote, background, body and omits empties', () => {
+  it('emits the user body only and omits empty bodies', () => {
     expect(assembleUserBlocks({ body: 'hi' })).toEqual(['hi']);
-    const blocks = assembleUserBlocks({ body: 'hi', quote: 'q', background: 'b' });
-    expect(blocks[0]).toContain('[引用的消息]');
-    expect(blocks[1]).toContain('[群聊背景，仅作资料]');
-    expect(blocks[2]).toBe('hi');
+    expect(assembleUserBlocks({ body: '' })).toEqual([]);
   });
 });

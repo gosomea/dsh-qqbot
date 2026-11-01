@@ -42,14 +42,9 @@ describe('host adapter', () => {
     expect(adapter.capabilities).toContain('serviceFor(presets实例方法)');
   });
 
-  it('serviceFor：无实例方法时走动态模块函数', async () => {
-    const compaction = { compactNow: () => {} };
-    vi.doMock('@deepseek-ai/dsh-agent-presets', () => ({
-      serviceForAgent: (_ctx: unknown, agent: unknown, name: string) =>
-        name === 'compaction' ? compaction : undefined,
-    }));
+  it('serviceFor：无宿主解析能力时返回 undefined（不再依赖已移除的模块回退）', async () => {
     const adapter = createHostAdapter(makeCtx({}));
-    expect(await adapter.serviceFor({ ctx: {} }, 'compaction')).toBe(compaction);
+    expect(await adapter.serviceFor({ ctx: {} }, 'compaction')).toBeUndefined();
   });
 
   it('keeps a missing service scoped to the current preset', async () => {

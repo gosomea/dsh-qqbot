@@ -44,7 +44,9 @@ export function conversationGate(manager: SessionManager) {
         const ct = att.content_type || '';
         const kind: 'image' | 'video' | 'voice' | 'file' = ct === 'image' || ct.startsWith('image/') ? 'image' : ct === 'video' || ct.startsWith('video/') ? 'video' : ct === 'voice' || ct.startsWith('audio/') ? 'voice' : 'file';
         const raw = (att as { url?: string }).url;
-        const url = raw ? (raw.startsWith('//') ? `https:${raw}` : raw) : undefined;
+        const normalized = raw ? (raw.startsWith('//') ? `https:${raw}` : raw) : undefined;
+        // 只保留 http/https 媒体地址（防 javascript:/data: 等注入到 <a href>/<img src>）。
+        const url = normalized && /^https?:\/\//i.test(normalized) ? normalized : undefined;
         return { name: att.filename || '', type: ct, kind, ...(url ? { url } : {}) };
       }),
     }, isTrigger));

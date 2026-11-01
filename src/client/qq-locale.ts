@@ -18,10 +18,6 @@ export const ZH = {
   'view.settings.title': 'QQ 会话设置',
   // 会话设置面板（点5）
   'peer.settings.aria': '会话设置',
-  'peer.retain.label': '保留消息记录条数',
-  'peer.retain.hint': '按总条数保留，0 表示停止新增记录，已有记录保留。',
-  'peer.retain.legacyDays': '现有记录仍使用 {days} 天期限；保存记录数量后改为仅按条数保留。',
-  'peer.retain.invalid': '记录条数必须是 0 到 1000000 之间的整数。',
   'peer.deferred.hint': '补充提示词立即生效；Agent 预设与工作目录在下次新会话生效；模型与权限可在原生输入区调整。',
   'peer.saveHint.dirty': '有未保存修改。',
   'peer.saveHint.saved': '已保存。',
@@ -49,10 +45,6 @@ type QQBotDict = Record<QQBotKey, string>;
 const EN: QQBotDict = {
   'view.settings.title': 'QQ chat settings',
   'peer.settings.aria': 'Chat settings',
-  'peer.retain.label': 'Messages to keep',
-  'peer.retain.hint': 'Keeps the latest messages by total count. 0 stops recording new messages; existing records stay.',
-  'peer.retain.legacyDays': 'Existing records still use a {days}-day limit; saving a count switches them to count-only retention.',
-  'peer.retain.invalid': 'Message count must be an integer between 0 and 1000000.',
   'peer.deferred.hint': 'Extra prompt applies immediately; agent preset and working directory apply to the next new session; model and permission can be changed in the native composer.',
   'peer.saveHint.dirty': 'Unsaved changes.',
   'peer.saveHint.saved': 'Saved.',

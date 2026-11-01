@@ -39,7 +39,7 @@ export interface ConversationLifecycle {
   rotateDays: number; maxMessages: number; retentionDays: number | null;
 }
 export interface NativeLogSettings { enabled: boolean; since: number | null }
-export interface RecordingSettings { version: number; enabled: boolean; since: number | null; retentionDays: number; maxMessages?: number }
+export interface RecordingSettings { version: number; enabled: boolean; since: number | null; retentionDays: number }
 export type RecordingBodyState = 'available' | 'expired' | 'disabled';
 export type MessageProvenance = 'qq' | 'web' | 'automatic' | 'command' | 'interaction' | 'sdk' | 'legacy';
 export interface DeliveryProvenance { sourceSessionId?: string; sourceMessageId?: string; turnId?: string; answerId?: string; provenance?: MessageProvenance }
@@ -97,8 +97,7 @@ export interface SlashCommandDescriptor { name: string; aliases: string[]; descr
 export interface ConversationSnapshot { conversations: ConversationView[]; tools: ToolCatalogEntry[]; ownerIds: string[]; defaults?: QQDefaults; commands?: SlashCommandDescriptor[]; /** QQ default working directory used when a conversation leaves cwd empty. */ defaultCwd?: string; errors?: string[] }
 export type ConversationAction =
   | { action: 'defaults'; expectedVersion: number; settings: QQAgentSettings }
-  | { action: 'settings'; key: string; expectedVersion: number; settings: QQAgentSettings; alias: string; receiveEnabled: boolean; recording?: { expectedVersion: number; maxMessages: number } }
-  | { action: 'recording'; key: string; expectedVersion: number; enabled: boolean; retentionDays: number; maxMessages?: number }
+  | { action: 'settings'; key: string; expectedVersion: number; settings: QQAgentSettings; alias: string; receiveEnabled: boolean }
   | { action: 'clear-records'; key: string }
   | { action: 'timeline'; key: string; before?: number; snapshot?: number; after?: number; query?: string; limit?: number }
   | { action: 'create-session'; key: string; operationId: string; expectedCurrentSessionId: string | null; expectedPolicyVersion: number; workspaceId: string; presetId: string }

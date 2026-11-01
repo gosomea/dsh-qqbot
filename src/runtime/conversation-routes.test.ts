@@ -60,49 +60,25 @@ function fixture(scope: 'group' | 'c2c' = 'group', mode: Mode = 'open') {
   return { service, manager, config, agent, cancelPending, logger, root, data, patchPath, original, request, post, key };
 }
 
-describe('recording through the real recording route', () => {
-  it('persists the submitted count and prunes actual bodies while the Agent is running', async () => {
-    const f = fixture(); const before = f.service.requireEntry(f.key);
-    Object.assign(f.agent, { status: 'running' });
-    const response = await f.post('/recording', { key: f.key, expectedVersion: before.recording!.version, enabled: true, maxMessages: 3, retentionDays: 0 });
-    expect(response.status).toBe(200);
-    expect(response.body.snapshot.conversations.find((entry: { key: string }) => entry.key === f.key).recording).toMatchObject({ enabled: true, maxMessages: 3, retentionDays: 0 });
-    for (let index = 1; index <= 4; index++) f.service.store.recordMessage(f.key, { id: `in-${index}`, senderId: 'actor', senderName: '', text: `body-${index}`, at: Date.now(), mentioned: false, attachments: [] });
-    const reopened = new ConversationStore(f.data, 'admission');
-    expect(reopened.get(f.key)?.recording).toMatchObject({ enabled: true, maxMessages: 3, retentionDays: 0 });
-    // 记录默认不再按条数清理：即使设置了 maxMessages=3，也全部保留。
-    expect(reopened.timeline(f.key).items.map(row => row.direction === 'inbound' ? row.message.id : row.delivery.id)).toEqual(['in-4', 'in-3', 'in-2', 'in-1']);
-    expect(f.service.requireEntry(f.key).policy).toEqual(before.policy);
-    expect(f.agent.cancel).not.toHaveBeenCalled();
-  });
-
-  it('treats zero as disabling new recording and retains existing bodies', async () => {
-    const f = fixture(); const before = f.service.requireEntry(f.key);
+describe('clearing message records through the real action route', () => {
+  it('clears bodies while keeping message ids for dedupe, and persists across reopen', async () => {
+    const f = fixture();
     const message = { senderId: 'actor', senderName: '', at: Date.now(), mentioned: false, attachments: [] };
-    f.service.store.recordMessage(f.key, { ...message, id: 'saved', text: 'saved body' });
-    const response = await f.post('/recording', { key: f.key, expectedVersion: before.recording!.version, enabled: true, maxMessages: 0, retentionDays: 7 });
+    for (let index = 1; index <= 3; index++) f.service.store.recordMessage(f.key, { ...message, id: `in-${index}`, text: `body-${index}` });
+    expect(f.service.store.timeline(f.key).items).toHaveLength(3);
+    const response = await f.post('/action', { action: 'clear-records', key: f.key });
     expect(response.status).toBe(200);
-    f.service.store.recordMessage(f.key, { ...message, id: 'paused', text: 'unsaved body' });
+    // 记录页清空
+    expect(f.service.store.timeline(f.key).items).toHaveLength(0);
+    // 去重身份保留：同一条消息再次到达不视为新消息
+    expect(f.service.store.hasMessage(f.key, 'in-2')).toBe(true);
+    // 重启后仍然清空且 id 保留
     const reopened = new ConversationStore(f.data, 'admission');
-    expect(reopened.get(f.key)?.recording).toMatchObject({ enabled: false, maxMessages: 0, retentionDays: 0 });
-    expect(reopened.timeline(f.key).items.map(row => row.direction === 'inbound' ? row.message.id : row.delivery.id)).toEqual(['saved']);
-  });
-
-  it('preserves day-based legacy behavior when no count is submitted', async () => {
-    const f = fixture(); const before = f.service.requireEntry(f.key);
-    const response = await f.post('/recording', { key: f.key, expectedVersion: before.recording!.version, enabled: true, retentionDays: 3 });
-    expect(response.status).toBe(200);
-    expect(new ConversationStore(f.data, 'admission').get(f.key)?.recording).toEqual({ enabled: true, retentionDays: 3, version: before.recording!.version + 1, since: before.recording!.since });
-  });
-
-  it.each([-1, 1.5, 1_000_001, Number.MAX_SAFE_INTEGER + 1, '3', null])('rejects invalid count %s without changing saved settings', async maxMessages => {
-    const f = fixture(); const before = f.service.requireEntry(f.key);
-    const persistedBefore = new ConversationStore(f.data, 'admission').get(f.key);
-    const response = await f.post('/recording', { key: f.key, expectedVersion: before.recording!.version, enabled: true, maxMessages, retentionDays: 0 });
-    expect(response.status).toBe(400);
-    expect(response.body.error).toContain('记录条数无效');
-    expect(f.service.requireEntry(f.key)).toEqual(before);
-    expect(new ConversationStore(f.data, 'admission').get(f.key)).toEqual(persistedBefore);
+    expect(reopened.timeline(f.key).items).toHaveLength(0);
+    expect(reopened.hasMessage(f.key, 'in-2')).toBe(true);
+    // 清空不改变策略
+    expect(f.service.requireEntry(f.key).policy.version).toBeGreaterThan(0);
+    expect(f.agent.cancel).not.toHaveBeenCalled();
   });
 });
 

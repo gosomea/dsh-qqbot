@@ -48,8 +48,9 @@ export function parseMessage(value: unknown): GroupMessageRecord {
   if (result instanceof Promise) throw new Error('Message schema must be synchronous');
   if (result.issues) throw new TypeError('Invalid QQ message record');
   const { id, senderId, senderName, text, at, mentioned, attachments, contextEligible, provenance, sessionId, turnId, sourceMessageId, bodyState, bodyHash } = result.value as ReturnType<typeof messageSchema>;
+  const attachmentsTooLarge = attachments.some((item) => item.name.length > 1_024 || item.type.length > 256 || (item.url?.length ?? 0) > 4_096 || (item.url !== undefined && !/^https?:\/\//i.test(item.url)));
   if (!id || id.length > 1_024 || senderId.length > 1_024 || senderName.length > 300 || text.length > 100_000
-    || attachments.length > 100 || attachments.some((item) => item.name.length > 1_024 || item.type.length > 256 || (item.url?.length ?? 0) > 4_096)) throw new TypeError('QQ message exceeds storage limits');
+    || attachments.length > 100 || attachmentsTooLarge) throw new TypeError('QQ message exceeds storage limits');
   // Explicit projection drops transport tokens and arbitrary raw fields, but keeps the media url/kind so the
   // web UI can render images/video/voice/file the way QQ shows them.
   return {
@@ -125,11 +126,10 @@ function parseRole(value: unknown): RoleSettings {
 export function parseRecording(value: unknown): RecordingSettings {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('QQ 记录配置无效');
   const data = Object.fromEntries(Object.entries(value));
-  const { version, enabled, since, retentionDays, maxMessages } = data;
+  const { version, enabled, since, retentionDays } = data;
   if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1
     || typeof enabled !== 'boolean'
     || (since !== null && (typeof since !== 'number' || !Number.isSafeInteger(since) || since < 0))
-    || typeof retentionDays !== 'number' || !Number.isSafeInteger(retentionDays) || retentionDays < 0 || retentionDays > 36500
-    || (maxMessages !== undefined && (typeof maxMessages !== 'number' || !Number.isSafeInteger(maxMessages) || maxMessages < 0 || maxMessages > 1_000_000))) throw new TypeError('QQ 记录配置无效');
-  return { version, enabled: maxMessages === 0 ? false : enabled, since, retentionDays, ...(maxMessages === undefined ? {} : { maxMessages }) };
+    || typeof retentionDays !== 'number' || !Number.isSafeInteger(retentionDays) || retentionDays < 0 || retentionDays > 36500) throw new TypeError('QQ 记录配置无效');
+  return { version, enabled, since, retentionDays };
 }

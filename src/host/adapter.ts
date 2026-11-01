@@ -29,22 +29,7 @@ export interface HostAdapter {
 }
 
 /** 模块级函数的动态 import 结果缓存（spec 变量路径绕开本地依赖类型检查） */
-const moduleCache = new Map<string, Record<string, unknown> | undefined>();
-
-async function importModule(spec: string, logger?: AdapterLogger): Promise<Record<string, unknown> | undefined> {
-  if (moduleCache.has(spec)) return moduleCache.get(spec);
-  let mod: Record<string, unknown> | undefined;
-  try {
-    mod = (await import(spec)) as Record<string, unknown>;
-  } catch {
-    mod = undefined;
-    logger?.warn(`host adapter: module not resolvable: ${spec}`);
-  }
-  moduleCache.set(spec, mod);
-  return mod;
-}
-
-export function createHostAdapter(ctx: Context, logger?: AdapterLogger): HostAdapter {
+export function createHostAdapter(ctx: Context, _logger?: AdapterLogger): HostAdapter {
   const capabilities: string[] = [];
 
   // events 读取路径只有运行时才能确定，sessionEvents 内自适应
@@ -71,18 +56,10 @@ export function createHostAdapter(ctx: Context, logger?: AdapterLogger): HostAda
     },
 
     async serviceFor(agent, name) {
-      if (resolveFn) {
-        try {
-          return resolveFn(agent, name);
-        } catch { /* 宿主实现差异，走模块函数 */ }
-      }
-      const mod = await importModule('@deepseek-ai/dsh-agent-presets', logger);
-      const fn = mod?.serviceForAgent as
-        | ((ctx: unknown, agent: { ctx: unknown }, name: string) => unknown)
-        | undefined;
-      if (typeof fn !== 'function') return undefined;
+      // 宿主通过 resolveFn 提供按名称解析 agent 级服务；无该能力时本层不提供（不再回退到已不存在的模块）。
+      if (!resolveFn) return undefined;
       try {
-        return fn(ctx, agent, name);
+        return resolveFn(agent, name);
       } catch {
         return undefined;
       }
@@ -115,7 +92,5 @@ function safeGet(ctx: Context, name: string): unknown {
   }
 }
 
-/** 测试辅助：清空模块缓存 */
-export function _resetAdapterCache(): void {
-  moduleCache.clear();
-}
+/** 测试辅助：模块缓存已移除，保留空实现以兼容既有测试调用。 */
+export function _resetAdapterCache(): void { /* no-op */ }

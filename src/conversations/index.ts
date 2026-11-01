@@ -101,24 +101,18 @@ export class ConversationStore {
     this.commit({ ...this.catalog, defaults });
     return clone(defaults);
   }
-  public updateSettings(key: string, expectedVersion: number, input: unknown, alias: string, receiveEnabled: boolean, recording?: { expectedVersion: number; maxMessages: number }): ConversationEntry {
-    const entry = this.previewSettings(key, expectedVersion, input, alias, receiveEnabled, recording);
+  public updateSettings(key: string, expectedVersion: number, input: unknown, alias: string, receiveEnabled: boolean): ConversationEntry {
+    const entry = this.previewSettings(key, expectedVersion, input, alias, receiveEnabled);
     this.replace(entry);
     return clone(entry);
   }
-  public previewSettings(key: string, expectedVersion: number, input: unknown, alias: string, receiveEnabled: boolean, recording?: { expectedVersion: number; maxMessages: number }): ConversationEntry {
+  public previewSettings(key: string, expectedVersion: number, input: unknown, alias: string, receiveEnabled: boolean): ConversationEntry {
     this.assertWritable();
     const entry = this.require(key);
     if (entry.policy.version !== expectedVersion) throw new ConversationConflictError();
     const settings = validateQQAgentSettings(input);
     if (typeof alias !== 'string' || alias.length > 300 || alias.includes('\0') || typeof receiveEnabled !== 'boolean') throw new TypeError('QQ 对话设置无效');
     const policy = this.settingsPolicy(entry.policy, settings);
-    if (recording) {
-      const before = this.recording(entry);
-      if (before.version !== recording.expectedVersion) throw new ConversationConflictError('记录设置已更新，请刷新后重试');
-      if (!Number.isSafeInteger(recording.maxMessages) || recording.maxMessages < 0 || recording.maxMessages > 1_000_000) throw new TypeError('QQ 记录条数无效');
-      entry.recording = parseRecording({ version: before.version + 1, enabled: recording.maxMessages > 0, maxMessages: recording.maxMessages, retentionDays: 0, since: recording.maxMessages > 0 ? before.since ?? this.now() : before.since });
-    }
     entry.settings = settings; entry.defaultsPending = false; entry.alias = alias;
     entry.policy = { ...policy, version: expectedVersion + 1, receiveEnabled };
     return clone(entry);
@@ -247,13 +241,13 @@ export class ConversationStore {
     this.replace(entry);
     return clone(entry);
   }
-  public updateRecording(key: string, expectedVersion: number, input: Pick<RecordingSettings, 'enabled' | 'retentionDays' | 'maxMessages'>): ConversationEntry {
+  /** 更新记录开关与按天保留期限（不再有按条数上限；条数概念已移除）。 */
+  public updateRecording(key: string, expectedVersion: number, input: Pick<RecordingSettings, 'enabled' | 'retentionDays'>): ConversationEntry {
     this.assertWritable();
     const entry = this.require(key);
     const recording = this.recording(entry);
     if (recording.version !== expectedVersion) throw new ConversationConflictError();
-    const enabled = input.enabled && input.maxMessages !== 0;
-    entry.recording = parseRecording({ ...input, retentionDays: input.maxMessages === undefined ? input.retentionDays : 0, enabled, version: expectedVersion + 1, since: enabled ? recording.since ?? this.now() : recording.since });
+    entry.recording = parseRecording({ enabled: input.enabled, retentionDays: input.retentionDays, version: expectedVersion + 1, since: input.enabled ? recording.since ?? this.now() : recording.since });
     this.replace(entry);
     this.lastPrune.delete(key);
     this.prune(key, entry.recording.retentionDays);
@@ -373,7 +367,6 @@ export class ConversationStore {
     // Durable ledger identities also cover retained tombstones beyond the catalog's bounded cache.
     recent.push(stored);
     this.recent.set(key, recent.slice(-Math.max(100, entry.policy.context.maxMessages + 1)));
-    if (recording.maxMessages !== undefined) this.prune(key, recording.retentionDays);
     return true;
   }
 
@@ -503,7 +496,8 @@ export class ConversationStore {
       rows.set(`outbound:${id}`, { direction: 'outbound', order: operation.order, change: operation.change, delivery: this.retiredDelivery(id, operation) });
     }
     let items = [...rows.values()].filter(row => row.order < before && (after === undefined || row.change > after));
-    if (after === undefined && this.recording(entry).maxMessages !== undefined) items = items.filter(row => (row.direction === 'inbound' ? row.message.bodyState : row.delivery.bodyState) !== 'expired');
+    // 记录默认不按条数清理；被清空/过期（expired）的正文不再出现在时间线。
+    if (after === undefined) items = items.filter(row => (row.direction === 'inbound' ? row.message.bodyState : row.delivery.bodyState) !== 'expired');
     // Incremental pages must include replacements that no longer match the search.
     if (query && after === undefined) items = items.filter(row => {
       const text = row.direction === 'inbound' ? `${row.message.senderName}\n${row.message.text}` : row.delivery.text;
@@ -545,7 +539,6 @@ export class ConversationStore {
     next.timeline[key] = { nextOrder: timeline.nextOrder + 1, nextChange: timeline.nextChange + 1 };
     this.commit(next);
     this.append(key, this.deliveryPath(key), record);
-    if (this.recording(entry).maxMessages !== undefined) this.prune(key, this.recording(entry).retentionDays);
     return { record: clone(record), created: true };
   }
 
@@ -566,8 +559,6 @@ export class ConversationStore {
     if (operation) Object.assign(operation, { state: record.state, parts: record.parts, change: record.change });
     this.commit(next);
     if (record.state === 'accepted' && existing.state !== 'accepted') this.publish(key, record);
-    const recording = this.recording(this.require(key));
-    if (recording.maxMessages !== undefined) this.prune(key, recording.retentionDays);
     return clone(this.findDelivery(key, id) ?? record);
   }
 

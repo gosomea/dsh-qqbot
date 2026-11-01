@@ -514,7 +514,8 @@ describe('independent durable QQ recording and timeline', () => {
     expect(target.get(entry.key)?.lastMessage).toBe('');
     const files = [logPath(entry.key, 'messages'), logPath(entry.key, 'deliveries'), join(root, readdirSync(root).find(name => name.startsWith('conversations-') && name.endsWith('.json'))!)];
     for (const file of files) expect(readFileSync(file, 'utf8')).not.toMatch(/PRIVATE_(INBOUND|OUTBOUND)_BODY/);
-    expect(target.timeline(entry.key).items).toHaveLength(3);
+    // 清空/过期后的正文不再出现在时间线（本轮改为无条件隐藏 expired），但投递身份仍保留（下面断言）。
+    expect(target.timeline(entry.key).items).toHaveLength(0);
     expect(target.timeline(entry.key, { query: 'PRIVATE_' }).items).toEqual([]);
     expect(target.beginDelivery(entry.key, 'outbound-id', 'PRIVATE_OUTBOUND_BODY').created).toBe(false);
     expect(target.beginDelivery(entry.key, 'outbound-id', 'PRIVATE_OUTBOUND_BODY').record).toMatchObject({ text: '', bodyState: 'expired', state: 'accepted' });

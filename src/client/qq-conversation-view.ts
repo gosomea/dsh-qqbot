@@ -131,7 +131,7 @@ export function QQMessageTimeline({ entry, store }: { entry: ConversationView; s
       .finally(() => { if (generation.current === request) { pending.current = false; setBusy(false); } });
   };
   const feedback = passiveReplyFeedback(entry.passiveReply, now);
-  const visible = items.filter(item => timelineMatches(item, search) && (entry.recording?.maxMessages === undefined || (item.direction === 'inbound' ? item.message.bodyState : item.delivery.bodyState) !== 'expired'));
+  const visible = items.filter(item => timelineMatches(item, search) && (item.direction === 'inbound' ? item.message.bodyState : item.delivery.bodyState) !== 'expired');
   return h('section', { className: 'imqc-timeline', 'aria-label': 'QQ 消息记录', 'aria-busy': busy },
     h('p', { className: 'imqc-hint' }, '收到的 QQ 消息在左，机器人回复在右；点每条右侧 ↗ 可在原生会话中查看该轮。'),
     feedback.summary ? h('p', { className: 'imqc-hint imqc-timelineFeedback' }, feedback.summary) : null,

@@ -68,7 +68,6 @@ describe('idle per-peer Agent settings', () => {
     Object.assign(f.agent, { status: 'running' });
     await expect(f.service.saveSettings(f.key, before.policy.version, settings, '', true)).rejects.toThrow('正在生成');
     Object.assign(f.agent, { status: 'idle' });
-    await expect(f.service.saveSettings(f.key, before.policy.version, settings, 'changed', true, { expectedVersion: before.recording!.version + 1, maxMessages: 10 })).rejects.toThrow('记录设置已更新');
     expect(f.service.requireEntry(f.key)).toEqual(before); expect(f.select).not.toHaveBeenCalled();
   });
   it.each([

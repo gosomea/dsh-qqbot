@@ -630,12 +630,12 @@ export class ConversationService {
       }
     }
   }
-  async saveSettings(key: string, expectedVersion: number, input: unknown, alias: string, receiveEnabled: boolean, recording?: { expectedVersion: number; maxMessages: number }): Promise<string | undefined> {
+  async saveSettings(key: string, expectedVersion: number, input: unknown, alias: string, receiveEnabled: boolean): Promise<string | undefined> {
     const before = this.requireEntry(key);
     this.assertCommandAuthority(before.scope, before.peerId);
-    if (this.busy(key)) throw new Error('会话正在生成，请停止后再保存设置。记录条数可单独保存。');
+    if (this.busy(key)) throw new Error('会话正在生成，请停止后再保存设置。');
     const settings = validateQQAgentSettings(input);
-    const preview = this.store.previewSettings(key, expectedVersion, settings, alias, receiveEnabled, recording);
+    const preview = this.store.previewSettings(key, expectedVersion, settings, alias, receiveEnabled);
     const executionChanged = JSON.stringify(before.settings?.execution) !== JSON.stringify(settings.execution);
     await this.validateAgentSettings(settings);
     const changedModel = JSON.stringify(before.settings?.model) !== JSON.stringify(settings.model);
@@ -645,7 +645,7 @@ export class ConversationService {
     if (route && record && !record.agent.model?.select) throw new Error('当前宿主不支持原生模型选择，设置保持不变。');
     const apply = async (): Promise<void> => {
       if (this.requireEntry(key).policy.version !== expectedVersion) throw new Error('配置已更新，请刷新后重试');
-      this.store.previewSettings(key, expectedVersion, settings, alias, receiveEnabled, recording);
+      this.store.previewSettings(key, expectedVersion, settings, alias, receiveEnabled);
       const oldRoute = record?.agent.model?.current() ?? record?.modelRoute;
       const oldSandbox = record ? this.sandbox(record) : undefined;
       const previousSession = record ? nativeSession(record) : undefined;
@@ -656,7 +656,7 @@ export class ConversationService {
       try {
         if (record && route) { record.agent.model?.select?.(route); record.modelRoute = route; }
         if (record && executionChanged) this.applyExecutionPolicy(record, preview.policy, true);
-        this.store.updateSettings(key, expectedVersion, settings, alias, receiveEnabled, recording);
+        this.store.updateSettings(key, expectedVersion, settings, alias, receiveEnabled);
       } catch (error) {
         if (record && route && oldRoute) { record.agent.model?.select?.(oldRoute); record.modelRoute = oldRoute; }
         if (record && executionChanged) {
@@ -1047,6 +1047,9 @@ export class ConversationService {
     // Drop the per-agent prompt sections so a later re-attach reinstalls fresh ones.
     this.promptHandles.get(_sessionId)?.dispose();
     this.promptHandles.delete(_sessionId);
+    // Drop the per-agent policy guard too, so evicted/rotated sessions do not leak the disposer closure.
+    this.policyDisposers.get(_sessionId)?.();
+    this.policyDisposers.delete(_sessionId);
   }
 
 }

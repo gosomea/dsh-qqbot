@@ -8,27 +8,14 @@ import { useQQAgentCatalog } from './qq-agent-catalog.ts';
 import type { QQTranslate } from './qq-locale.ts';
 import type { QQSessionStore } from './qq-session-store.ts';
 
-interface PeerDraft {
-  version: number;
-  settings: QQAgentSettings;
-  alias: string;
-  receiveEnabled: boolean;
-  recordingVersion: number;
-  maxMessages: number;
-  countEdited: boolean;
-}
+interface PeerDraft { version: number; settings: QQAgentSettings; alias: string; receiveEnabled: boolean }
 interface RetainedDraft { draft: PeerDraft; base: PeerDraft }
 const drafts = new Map<string, RetainedDraft>();
 function current(entry: ConversationView, settings: QQAgentSettings): PeerDraft {
-  return { version: entry.policy.version, settings: structuredClone(settings), alias: entry.alias, receiveEnabled: entry.policy.receiveEnabled !== false,
-    recordingVersion: entry.recording?.version ?? 0, maxMessages: entry.recording?.enabled ? entry.recording.maxMessages ?? 1000 : 0,
-    countEdited: false };
+  return { version: entry.policy.version, settings: structuredClone(settings), alias: entry.alias, receiveEnabled: entry.policy.receiveEnabled !== false };
 }
 function settingsChanged(base: PeerDraft, draft: PeerDraft): boolean {
   return base.alias !== draft.alias || base.receiveEnabled !== draft.receiveEnabled || JSON.stringify(base.settings) !== JSON.stringify(draft.settings);
-}
-function recordingChanged(base: PeerDraft, draft: PeerDraft, entry: ConversationView): boolean {
-  return base.maxMessages !== draft.maxMessages || (draft.countEdited && entry.recording?.retentionDays !== 0);
 }
 
 export function QQPeerSettings({ entry, store, tools, commands = [], selectorSource, t, workspaces = [], defaultWorkspaceName, defaultCwd }: {
@@ -49,17 +36,13 @@ function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selec
   const [notice, setNotice] = useState('');
   const pending = useRef(false);
   const mounted = useRef(true);
-  const changedSettings = settingsChanged(base, draft);
-  const changedRecording = recordingChanged(base, draft, entry);
-  const dirty = changedSettings || changedRecording;
+  const dirty = settingsChanged(base, draft);
   const settingsConflict = base.version !== entry.policy.version;
-  const recordingConflict = base.recordingVersion !== (entry.recording?.version ?? 0);
-  const validCount = Number.isSafeInteger(draft.maxMessages) && draft.maxMessages >= 0 && draft.maxMessages <= 1_000_000;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { if (dirty) drafts.set(entry.key, retained); else drafts.delete(entry.key); }, [entry.key, retained, dirty]);
   useEffect(() => {
-    if (!dirty && (settingsConflict || recordingConflict)) { const value = current(entry, settings); setRetained({ draft: value, base: value }); }
-  }, [dirty, settingsConflict, recordingConflict, entry, settings]);
+    if (!dirty && settingsConflict) { const value = current(entry, settings); setRetained({ draft: value, base: value }); }
+  }, [dirty, settingsConflict, entry, settings]);
   const patch = (next: Partial<PeerDraft>): void => { setRetained(value => ({ ...value, draft: { ...value.draft, ...next } })); setError(''); setNotice(''); };
   const discard = (): void => { const value = current(entry, settings); setRetained({ draft: value, base: value }); drafts.delete(entry.key); setError(''); setNotice(''); };
   const clearRecords = (): void => {
@@ -78,22 +61,15 @@ function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selec
     }).catch((cause: unknown) => { if (mounted.current) setError(cause instanceof Error ? cause.message : '接入规则保存失败'); })
       .finally(() => { pending.current = false; if (mounted.current) setBusy(false); });
   };
-  const save = (recordingOnly = false): void => {
-    const saveSettings = changedSettings && !recordingOnly;
-    const saveRecording = changedRecording;
-    if (pending.current || (!saveSettings && !saveRecording) || (saveSettings && (entry.running || settingsConflict)) || (saveRecording && (!entry.recording || recordingConflict || !validCount))) return;
+  const save = (): void => {
+    if (pending.current || !dirty || (entry.running || settingsConflict)) return;
     pending.current = true; setBusy(true); setError(''); setNotice('');
-    const action = saveSettings
-      ? { action: 'settings' as const, key: entry.key, expectedVersion: base.version, settings: draft.settings, alias: draft.alias, receiveEnabled: draft.receiveEnabled,
-        ...(saveRecording ? { recording: { expectedVersion: base.recordingVersion, maxMessages: draft.maxMessages } } : {}) }
-      : { action: 'recording' as const, key: entry.key, expectedVersion: base.recordingVersion, enabled: draft.maxMessages > 0, maxMessages: draft.maxMessages, retentionDays: 0 };
-    void store.perform(action).then(result => {
+    void store.perform({ action: 'settings', key: entry.key, expectedVersion: base.version, settings: draft.settings, alias: draft.alias, receiveEnabled: draft.receiveEnabled }).then(result => {
       const saved = result.snapshot?.conversations.find(value => value.key === entry.key);
       if (!saved?.settings) throw new Error('保存结果未确认，草稿已保留。请刷新目录核对。');
       const value = current(saved, saved.settings);
-      const next = recordingOnly && changedSettings ? { draft: { ...draft, recordingVersion: value.recordingVersion, maxMessages: value.maxMessages, countEdited: false }, base: { ...base, recordingVersion: value.recordingVersion, maxMessages: value.maxMessages } } : { draft: value, base: value };
-      if (recordingOnly && changedSettings) drafts.set(entry.key, next); else drafts.delete(entry.key);
-      if (mounted.current) { setRetained(next); setNotice(result.notice ?? (saveSettings ? '会话设置已保存。Agent 预设、工作目录和补充提示词在下次新会话生效。' : '记录数量已保存。')); }
+      drafts.delete(entry.key);
+      if (mounted.current) { setRetained({ draft: value, base: value }); setNotice(result.notice ?? '会话设置已保存。Agent 预设、工作目录和补充提示词在下次新会话生效。'); }
     }).catch((cause: unknown) => { if (mounted.current) setError(cause instanceof Error ? cause.message : '保存失败，草稿已保留。'); })
       .finally(() => { pending.current = false; if (mounted.current) setBusy(false); });
   };
@@ -108,16 +84,13 @@ function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selec
     h('div', { className: 'imqc-inline' },
       h('span', { className: 'imqc-hint' }, '消息记录会全部保留，不会自动清理。'),
       h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: clearRecords }, '清空消息记录')),
-    entry.recordingError ? h('p', { role: 'alert', className: 'imqc-error' }, entry.recordingError) : null,
     h('p', { className: 'imqc-hint' }, t('peer.deferred.hint')),
-    entry.running ? h('p', { role: 'status', className: 'imqc-hint' }, '任务运行中，可继续编辑草稿；任务结束后再保存会话设置。消息记录数量可独立保存。') : null,
-    settingsConflict && changedSettings || recordingConflict && changedRecording ? h('p', { role: 'alert', className: 'imqc-error' }, '设置已在其他位置更新。草稿保留，请放弃修改以载入最新设置。') : null,
-    !validCount ? h('p', { role: 'alert', className: 'imqc-error' }, t('peer.retain.invalid')) : null,
+    entry.running ? h('p', { role: 'status', className: 'imqc-hint' }, '任务运行中，可继续编辑草稿；任务结束后再保存会话设置。') : null,
+    settingsConflict && dirty ? h('p', { role: 'alert', className: 'imqc-error' }, '设置已在其他位置更新。草稿保留，请放弃修改以载入最新设置。') : null,
     error ? h('p', { role: 'alert', className: 'imqc-error' }, error) : null,
     notice ? h('p', { role: 'status', className: 'imqc-hint' }, notice) : null,
     h('div', { className: 'imqc-actions imqc-saveBar' },
       h(Button, { variant: 'ghost', size: 'sm', disabled: busy || !dirty, onClick: discard }, '放弃修改'),
-      h(Button, { variant: 'primary', size: 'sm', disabled: busy || !dirty || (changedSettings && (entry.running || settingsConflict)) || (changedRecording && (!validCount || recordingConflict || !entry.recording)), onClick: () => save() }, busy ? '保存中…' : '保存会话设置'),
-      changedRecording && changedSettings && entry.running ? h(Button, { variant: 'outline', size: 'sm', disabled: busy || !validCount || recordingConflict || !entry.recording, onClick: () => save(true) }, '仅保存记录数量') : null,
+      h(Button, { variant: 'primary', size: 'sm', disabled: busy || !dirty || (entry.running || settingsConflict), onClick: () => save() }, busy ? '保存中…' : '保存会话设置'),
       h('span', { role: 'status', className: 'imqc-hint' }, dirty ? t('peer.saveHint.dirty') : t('peer.saveHint.saved'))));
 }

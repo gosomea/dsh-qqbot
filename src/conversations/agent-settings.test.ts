@@ -45,14 +45,12 @@ describe('QQ account defaults and per-peer settings', () => {
     const converted = reloaded.updateSettings(entry.key, before.policy.version, edited, '', true);
     expect(converted.policy).toMatchObject({ nativeTools: true, toolMode: 'native', permission: 'workspace-write', tools: {} });
   });
-  it('saves settings and row count in one transaction and persists scope prompts', () => {
+  it('saves settings in one transaction and persists scope prompts', () => {
     const { store } = fixture(); const first = store.ensure('c2c', 'person');
     store.bindSession(first.key, 'original'); const before = store.get(first.key)!;
     const settings = { ...before.settings!, promptDirect: 'next Session only', execution: { kind: 'custom' as const, permission: 'read-only' as const, tools: ['read'] } };
-    expect(() => store.updateSettings(first.key, before.policy.version, settings, 'alias', true, { expectedVersion: before.recording!.version + 1, maxMessages: 10 })).toThrow('记录设置已更新');
-    expect(store.get(first.key)).toEqual(before);
-    const after = store.updateSettings(first.key, before.policy.version, settings, 'alias', true, { expectedVersion: before.recording!.version, maxMessages: 10 });
-    expect(after).toMatchObject({ alias: 'alias', settings, policy: { nativeTools: false, tools: { read: 'allow' } }, recording: { maxMessages: 10, retentionDays: 0, enabled: true } });
+    const after = store.updateSettings(first.key, before.policy.version, settings, 'alias', true);
+    expect(after).toMatchObject({ alias: 'alias', settings, policy: { nativeTools: false, tools: { read: 'allow' } } });
     expect(after.settings?.promptDirect).toBe('next Session only');
   });
 });

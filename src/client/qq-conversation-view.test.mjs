@@ -21,7 +21,7 @@ function fixture(change = {}) {
   return { key: `view-${++sequence}`, appId: 'app', scope: 'group', peerId: 'group', name: '测试群', alias: '', currentSessionId: 'current',
     sessions: [{ sessionId: 'current', startedAt: 2 }, { sessionId: 'old', startedAt: 1 }], members: [], policy: defaultPolicy('custom', '/project'),
     settings: { preset: '', model: null, prompt: '', cwd: '', execution: { kind: 'native', permission: 'read-only' }, slashCommands: true },
-    recording: { version: 1, enabled: true, since: 1, retentionDays: 0, maxMessages: 1000 }, lastActivity: 2, observedAllMessages: false,
+    recording: { version: 1, enabled: true, since: 1, retentionDays: 0 }, lastActivity: 2, observedAllMessages: false,
     admitted: true, running: false, currentModel: null, currentPreset: 'standard', currentPermission: 'workspace-write', nextPreset: 'standard', deliveryState: null,
     currentWorkspace: { id: 'workspace', title: '项目', path: '/project' }, ...change };
 }

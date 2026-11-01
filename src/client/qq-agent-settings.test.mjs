@@ -36,7 +36,7 @@ function settings(change = {}) { return { preset: '', model: null, promptGroup: 
 function entry(change = {}) {
   return { key: `settings-${++sequence}`, appId: 'app', scope: 'group', peerId: 'peer', name: '测试群', alias: '', currentSessionId: 'current', sessions: [], members: [],
     policy: { ...defaultPolicy('custom', '/project'), nativeTools: true, receiveEnabled: true }, settings: settings(),
-    recording: { version: 1, enabled: true, since: 1, maxMessages: 1000, retentionDays: 0 },
+    recording: { version: 1, enabled: true, since: 1, retentionDays: 0 },
     lastActivity: 1, observedAllMessages: false, admitted: true, running: false, currentModel: null, currentPreset: null, nextPreset: null, deliveryState: null, ...change };
 }
 function setup(value = entry(), defaults = { version: 1, settings: settings() }) {

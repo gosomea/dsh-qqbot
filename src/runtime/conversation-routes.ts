@@ -38,14 +38,7 @@ export function registerConversationRoutes(ctx: Context, service: ConversationSe
           const running = service.busy(key);
           if (action === 'settings') {
             if (!Number.isSafeInteger(body.expectedVersion) || typeof body.receiveEnabled !== 'boolean') throw new Error('对话设置无效');
-            let recording: { expectedVersion: number; maxMessages: number } | undefined;
-            if (body.recording !== undefined) {
-              if (!body.recording || typeof body.recording !== 'object' || Array.isArray(body.recording)) throw new Error('记录设置无效');
-              const value = Object.fromEntries(Object.entries(body.recording));
-              if (!Number.isSafeInteger(value.expectedVersion) || !Number.isSafeInteger(value.maxMessages)) throw new Error('记录设置无效');
-              recording = { expectedVersion: Number(value.expectedVersion), maxMessages: Number(value.maxMessages) };
-            }
-            result.notice = await service.saveSettings(key, Number(body.expectedVersion), body.settings, field(body, 'alias', true), body.receiveEnabled, recording);
+            result.notice = await service.saveSettings(key, Number(body.expectedVersion), body.settings, field(body, 'alias', true), body.receiveEnabled);
           } else if (action === 'admit') {
             if (typeof body.enabled !== 'boolean') throw new Error('接收开关无效');
             if (service.setAdmission(key, body.enabled)) result.notice = '访问规则已保存；QQ消息接收规则将在连接重载后生效。';
@@ -56,11 +49,6 @@ export function registerConversationRoutes(ctx: Context, service: ConversationSe
             if (running) throw new Error('会话忙碌，请稍后修改生命周期');
             if (!Number.isSafeInteger(body.expectedVersion)) throw new Error('配置版本无效');
             service.store.updateLifecycle(key, Number(body.expectedVersion), body.lifecycle);
-          } else if (action === 'recording') {
-            if (!Number.isSafeInteger(body.expectedVersion) || typeof body.enabled !== 'boolean' || !Number.isSafeInteger(body.retentionDays)) throw new Error('记录设置无效');
-            if (body.maxMessages !== undefined && (!Number.isSafeInteger(body.maxMessages) || Number(body.maxMessages) < 0 || Number(body.maxMessages) > 1_000_000)) throw new Error('记录条数无效');
-            service.store.updateRecording(key, Number(body.expectedVersion), { enabled: body.enabled, retentionDays: Number(body.retentionDays), ...(body.maxMessages === undefined ? {} : { maxMessages: Number(body.maxMessages) }) });
-            service.pruneExpired();
           } else if (action === 'clear-records') {
             service.store.clearRecords(key);
           } else if (action === 'timeline') {
