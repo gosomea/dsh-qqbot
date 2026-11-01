@@ -122,8 +122,8 @@ export function QQMessageTimeline({ entry, store }: { entry: ConversationView; s
   const feedback = passiveReplyFeedback(entry.passiveReply, now);
   const visible = items.filter(item => timelineMatches(item, search) && (entry.recording?.maxMessages === undefined || (item.direction === 'inbound' ? item.message.bodyState : item.delivery.bodyState) !== 'expired'));
   return h('section', { className: 'imqc-timeline', 'aria-label': 'QQ 消息记录', 'aria-busy': busy },
-    h('p', { className: 'imqc-hint' }, '实际收到的 QQ 消息在左，机器人投递在右。这里没有第二个输入框；点击来源回到原生会话。'),
-    h('p', { className: 'imqc-hint' }, feedback.summary),
+    h('p', { className: 'imqc-hint' }, '收到的 QQ 消息在左，机器人回复在右；点每条右侧 ↗ 可在原生会话中查看该轮。'),
+    feedback.summary ? h('p', { className: 'imqc-hint imqc-timelineFeedback' }, feedback.summary) : null,
     h('form', { className: 'imqc-inline', onSubmit: (event: FormEvent) => { event.preventDefault(); setSearch(query.trim()); } }, h(Input, { type: 'search', value: query, 'aria-label': '搜索消息记录', placeholder: '搜索已保存的消息正文…', onChange: (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value) }), h(Button, { type: 'submit', variant: 'outline', size: 'sm' }, '查询')),
     error ? h('p', { role: 'alert', className: 'imqc-error' }, error) : null,
     page?.hasMore ? h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: older }, '读取更早记录') : null,
@@ -133,12 +133,22 @@ export function QQMessageTimeline({ entry, store }: { entry: ConversationView; s
       const session = incoming ? item.message.sessionId : item.delivery.sourceSessionId;
       const body = record.bodyState === 'expired' ? '正文已过期' : record.bodyState === 'disabled' ? '正文未记录' : record.text || '无文本内容';
       const provenance = record.provenance === 'web' ? '网页显式发送' : record.provenance === 'automatic' ? 'QQ 自动回复' : record.provenance === 'command' ? 'QQ 命令' : record.provenance === 'interaction' ? 'QQ 交互' : record.provenance === 'legacy' ? '历史记录' : 'QQ';
-      return h('article', { key: timelineIdentity(item), className: 'imqc-timelineMessage', 'data-direction': item.direction },
-        h('div', { className: 'imqc-messageMeta' }, `${incoming ? item.message.senderName || item.message.senderId.slice(-8) : '机器人'} · ${new Date(record.at).toLocaleString()} · ${provenance}`),
-        h('p', { className: 'imqc-messageText' }, body),
-        incoming && item.message.attachments.length ? h('p', { className: 'imqc-hint' }, item.message.attachments.map(attachment => `[${attachment.type}] ${attachment.name}`).join('、')) : null,
-        !incoming ? h('div', null, h('p', { className: 'imqc-hint' }, deliverySummary(item.delivery)), h('p', { className: 'imqc-hint' }, deliveryExplanation(item.delivery)), h('details', { className: 'imqc-partDetails' }, h('summary', null, `查看分段状态（${item.delivery.parts.length}）`), ...item.delivery.parts.map(part => h('p', { key: part.index, className: 'imqc-hint' }, `分段 ${part.index + 1}：${part.state}`, part.receiptId ? h('code', { className: 'imqc-receiptId' }, part.receiptId) : null))), item.delivery.error ? h('p', { role: 'alert', className: 'imqc-error' }, item.delivery.error) : null) : null,
-        session ? h(Button, { variant: 'ghost', size: 'sm', onClick: () => store.openSession(session) }, '查看原生会话来源') : null);
+      const failed = !incoming && (item.delivery.state === 'failed' || item.delivery.state === 'unknown');
+      return h('article', { key: timelineIdentity(item), className: 'imqc-timelineMessage', 'data-direction': item.direction, 'data-failed': failed || undefined },
+        h('div', { className: 'imqc-messageBody' },
+          h('div', { className: 'imqc-messageMeta' }, h('span', { className: 'imqc-messageWho' }, incoming ? (item.message.senderName || item.message.senderId.slice(-8)) : '机器人'), h('span', { className: 'imqc-messageWhen' }, new Date(record.at).toLocaleString())),
+          h('p', { className: 'imqc-messageText' }, body),
+          incoming && item.message.attachments.length ? h('p', { className: 'imqc-hint' }, item.message.attachments.map(attachment => `[${attachment.type}] ${attachment.name}`).join('、')) : null,
+          failed ? h('p', { className: 'imqc-error imqc-messageWarn', role: 'alert' }, item.delivery.state === 'failed' ? '发送失败' : '结果未知（可能部分已发出，请核对 QQ）') : null),
+        h('div', { className: 'imqc-messageAside' },
+          !incoming ? h('details', { className: 'imqc-msgInfo' }, h('summary', { title: '发送与来源详情', 'aria-label': '发送与来源详情' }, 'ⓘ'),
+            h('div', { className: 'imqc-msgInfoBody' },
+              h('p', { className: 'imqc-hint' }, deliverySummary(item.delivery)),
+              h('p', { className: 'imqc-hint' }, deliveryExplanation(item.delivery)),
+              h('p', { className: 'imqc-hint' }, `来源：${provenance}`),
+              ...item.delivery.parts.map(part => h('p', { key: part.index, className: 'imqc-hint' }, `分段 ${part.index + 1}：${part.state}`)),
+              item.delivery.error ? h('p', { role: 'alert', className: 'imqc-error' }, item.delivery.error) : null)) : null,
+          session ? h(Button, { variant: 'ghost', size: 'sm', className: 'imqc-jumpTurn', 'aria-label': '在原生会话中查看此消息', title: '在原生会话中查看此消息', onClick: () => store.openSession(session) }, '↗') : null));
     })),
     page && visible.length === 0 ? h('p', { className: 'imqc-hint' }, '没有匹配的消息记录。开启记录后，仅保存机器人实际收到的 QQ 消息与投递。') : null);
 }

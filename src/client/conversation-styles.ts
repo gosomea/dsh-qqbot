@@ -226,7 +226,8 @@ export function installConversationStyles(): void {
 .imqc-partDetails > summary { cursor: pointer; }
 .imqc-receiptId { display: block; overflow-wrap: anywhere; font-size: 11px; }
 .imqc-timelineRows { display: flex; flex-direction: column; gap: 12px; margin: 14px 0; }
-.imqc-timelineMessage { max-width: 85%; width: fit-content; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); }
+.imqc-timelineMessage { max-width: 85%; width: fit-content; padding: 8px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); display: flex; align-items: flex-start; gap: 8px; }
+.imqc-timelineMessage[data-failed] { border-color: var(--dsw-alias-state-error-primary); }
 .imqc-timelineMessage[data-direction=outbound] { align-self: flex-end; background: var(--dsw-alias-bg-layer-2); }
 .imqq-settingsModal { width: min(1000px, calc(100vw - 32px)); height: min(900px, calc(100dvh - 32px)); }
 /* 弹窗内容列限高，让 body 成为滚动容器（flex 滚动经典解法 min-height:0） */
