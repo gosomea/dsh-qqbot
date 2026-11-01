@@ -31,15 +31,15 @@ function recordingChanged(base: PeerDraft, draft: PeerDraft, entry: Conversation
   return base.maxMessages !== draft.maxMessages || (draft.countEdited && entry.recording?.retentionDays !== 0);
 }
 
-export function QQPeerSettings({ entry, store, tools, commands = [], selectorSource, t }: {
-  entry: ConversationView; store: QQSessionStore; tools: readonly ToolCatalogEntry[]; commands?: readonly SlashCommandDescriptor[]; selectorSource: SelectorSource; t: QQTranslate;
+export function QQPeerSettings({ entry, store, tools, commands = [], selectorSource, t, workspaces = [], defaultWorkspaceName }: {
+  entry: ConversationView; store: QQSessionStore; tools: readonly ToolCatalogEntry[]; commands?: readonly SlashCommandDescriptor[]; selectorSource: SelectorSource; t: QQTranslate; workspaces?: ReadonlyArray<{ workspaceId: string; title: string; path: string }>; defaultWorkspaceName?: string;
 }): ReactNode {
   if (!entry.settings) return h('p', { role: 'status', className: 'imqc-hint' }, '会话设置暂不可用，请刷新 QQ 目录。');
-  return h(PeerSettingsDraft, { key: entry.key, entry, settings: entry.settings, store, tools, commands, selectorSource, t });
+  return h(PeerSettingsDraft, { key: entry.key, entry, settings: entry.settings, store, tools, commands, selectorSource, t, workspaces, defaultWorkspaceName });
 }
 
-function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selectorSource, t }: {
-  entry: ConversationView; settings: QQAgentSettings; store: QQSessionStore; tools: readonly ToolCatalogEntry[]; commands?: readonly SlashCommandDescriptor[]; selectorSource: SelectorSource; t: QQTranslate;
+function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selectorSource, t, workspaces = [], defaultWorkspaceName }: {
+  entry: ConversationView; settings: QQAgentSettings; store: QQSessionStore; tools: readonly ToolCatalogEntry[]; commands?: readonly SlashCommandDescriptor[]; selectorSource: SelectorSource; t: QQTranslate; workspaces?: ReadonlyArray<{ workspaceId: string; title: string; path: string }>; defaultWorkspaceName?: string;
 }): ReactNode {
   const [retained, setRetained] = useState<RetainedDraft>(() => drafts.get(entry.key) ?? (() => { const draft = current(entry, settings); return { draft, base: draft }; })());
   const { draft, base } = retained;
@@ -94,7 +94,7 @@ function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selec
     !entry.admitted && entry.policy.receiveEnabled !== false ? h('div', { className: 'imqc-banner' }, h('p', { className: 'imqc-hint' }, '此对话当前未获接收许可。接收开关仍受账号访问范围约束；加入访问名单后才能接收。'),
       h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: admit }, '启用此对话并加入访问名单')) : null,
     h('label', { className: 'imqc-field' }, h('span', null, 'QQ 备注'), h(Input, { value: draft.alias, maxLength: 100, disabled: busy, 'aria-label': 'QQ 备注', onChange: (event: ChangeEvent<HTMLInputElement>) => patch({ alias: event.target.value }) })),
-    h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, commands, chatScope: entry.scope, onPickDirectory: selectorSource.pickDirectory, disabled: busy, onChange: value => patch({ settings: value }), onRefreshCatalog: catalog.refresh,
+    h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, commands, chatScope: entry.scope, onPickDirectory: selectorSource.pickDirectory, workspaces, onCreateWorkspace: selectorSource.createWorkspace, defaultWorkspaceName, disabled: busy, onChange: value => patch({ settings: value }), onRefreshCatalog: catalog.refresh,
       askTools: Object.entries(entry.policy.tools).filter(([, decision]) => decision === 'ask').map(([id]) => id) }),
     h('label', { className: 'imqc-field' }, h('span', null, t('peer.retain.label')), h(Input, { type: 'number', min: 0, max: 1_000_000, step: 1, value: draft.maxMessages, disabled: busy || !entry.recording, 'aria-label': t('peer.retain.label'), onChange: (event: ChangeEvent<HTMLInputElement>) => patch({ maxMessages: Number(event.target.value), countEdited: true }) })),
     h('p', { className: 'imqc-hint' }, t('peer.retain.hint')),

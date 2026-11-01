@@ -5,6 +5,8 @@ export interface SelectorSource {
   permissionCatalog?(): Promise<unknown>;
   /** Open the Host-native directory picker; resolves to an absolute path or null when cancelled. */
   pickDirectory?(): Promise<string | null>;
+  /** Adopt a host directory as a real DSH workspace (same route the native picker uses). */
+  createWorkspace?(path: string): Promise<{ workspaceId: string; title: string; path: string }>;
 }
 
 export interface ModelReasoningEffort { id: string; name: string; description?: string }

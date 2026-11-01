@@ -19,11 +19,13 @@ const tabs: [SegmentedTab<ViewTab>, ...SegmentedTab<ViewTab>[]] = [
   { value: 'settings', label: '会话设置', id: 'qq-settings-tab', panelId: 'qq-settings-panel' },
   { value: 'messages', label: '消息记录', id: 'qq-messages-tab', panelId: 'qq-messages-panel' },
 ];
-export function QQConversationView({ sessionId, store, selectorSource, t, useSessions, useProjection, conversationKey, initialTab }: {
+export function QQConversationView({ sessionId, store, selectorSource, t, useSessions, useWorkspaces, useProjection, conversationKey, initialTab, defaultWorkspaceName }: {
   sessionId: string | null; store: QQSessionStore; selectorSource: SelectorSource; t: QQTranslate; conversationKey?: string; initialTab?: QQDrawerTab;
   useSessions?: PropsRuntime<'conversation.view'>['useSessions']; useWorkspaces?: PropsRuntime<'conversation.view'>['useWorkspaces']; useProjection?: PropsRuntime<'conversation.view'>['useProjection']; defaultWorkspaceName?: string;
 }): ReactNode {
   const state = useQQSessionStore(store);
+  const workspaceItems = useWorkspaces?.(snapshot => snapshot.items) ?? [];
+  const workspaceChoices = workspaceItems.map(item => ({ workspaceId: String(item.workspaceId), title: item.title, path: item.path }));
   const summaries = useSessions?.(snapshot => snapshot.byId) ?? {};
   const projectedPreset = useProjection?.('agentPreset');
   const projectedPermissions = useProjection?.('permissions');
@@ -74,7 +76,7 @@ export function QQConversationView({ sessionId, store, selectorSource, t, useSes
           entry.archived ? h('div', { className: 'imqc-banner', role: 'status' }, h('strong', null, '当前 QQ 会话已归档'), h('p', null, '取消归档后继续接收，或新建会话。'),
             h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => setUnarchive(true) }, '取消归档继续…'),
             unarchive ? h('div', { className: 'imqc-actions' }, h('p', null, '确认取消归档并让 QQ 消息继续进入此会话？'), h(Button, { variant: 'primary', size: 'sm', disabled: busy, onClick: restore }, '确认取消归档'), h(Button, { variant: 'ghost', size: 'sm', disabled: busy, onClick: () => setUnarchive(false) }, '取消')) : null) : null,
-          h(QQPeerSettings, { key: entry.key, entry, store, tools: state.directory?.tools ?? [], commands: state.directory?.commands ?? [], selectorSource, t })) : null,
+          h(QQPeerSettings, { key: entry.key, entry, store, tools: state.directory?.tools ?? [], commands: state.directory?.commands ?? [], selectorSource, t, workspaces: workspaceChoices, defaultWorkspaceName })) : null,
       tab === 'messages' ? h(QQMessageTimeline, { key: entry.key, entry, store }) : null));
 }
 export function QQMessageTimeline({ entry, store }: { entry: ConversationView; store: QQSessionStore }): ReactNode {

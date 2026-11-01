@@ -47,8 +47,9 @@ describe('QQ preset operation authorization', () => {
     const target = { kind: 'newSession', key: entry.key, name: entry.name, sessionId: 'current', workspaceId: null, presetId: null, policyVersion: 1 };
     await act(async () => root.render(h(QQOperationDialog, { target, store, workspaces: [], selectorSource: { listAgentPresets: async () => ({ ok: true, value: { presets: [] } }) }, defaultWorkspaceName: '默认工作区' })));
     expect(document.body.textContent).toContain('请先在 DSH 工作区导航中添加工作区');
+    // 空工作区时仍提供「添加工作区（选择文件夹…）」入口，对齐原生 picker。
     await act(async () => document.querySelector('[aria-haspopup="menu"]').click());
-    expect(option('暂无可选项').disabled).toBe(true);
+    expect(option('＋ 添加工作区（选择文件夹…）').disabled).toBe(false);
     expect(submit().disabled).toBe(true);
     expect(perform).not.toHaveBeenCalled();
   });

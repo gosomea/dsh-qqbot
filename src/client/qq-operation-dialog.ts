@@ -31,6 +31,17 @@ export function QQOperationDialog({ target, store, workspaces, selectorSource, d
   const changed = entry?.currentSessionId !== target.sessionId || entry?.policy.version !== target.policyVersion;
   const allowedPresets = entry?.selectablePresets ?? entry?.policy.allowedPresets ?? [];
   const authorityMissing = entry?.selectablePresets === undefined && !entry?.policy.allowedPresets.length;
+  const [wsBusy, setWsBusy] = useState(false);
+  const ADD_WS = '::add-workspace';
+  const addWorkspace = (): void => {
+    if (!selectorSource.pickDirectory) return;
+    setWsBusy(true);
+    void selectorSource.pickDirectory().then(async path => {
+      if (!path || !selectorSource.createWorkspace) return;
+      try { const ws = await selectorSource.createWorkspace(path); setWorkspaceId(ws.workspaceId); }
+      catch (cause) { setError(cause instanceof Error ? cause.message : '无法创建或采用工作区'); }
+    }).finally(() => setWsBusy(false));
+  };
   const workspaceAvailable = workspaces.some(workspace => workspace.workspaceId === workspaceId);
   const presetAvailable = allowedPresets.includes(presetId) && presets.some(preset => preset.id === presetId && !preset.broken);
   const disabled = busy || loading || !entry?.admitted || entry.running || changed || !workspaceAvailable || !presetAvailable;
@@ -51,7 +62,7 @@ export function QQOperationDialog({ target, store, workspaces, selectorSource, d
       h('p', { className: 'imqq-dialogHint' }, target.name),
       h('p', { className: 'imqq-dialogHint' }, '工作区和 Agent 预设默认使用当前值。确认后 QQ 新消息进入新会话，旧历史保留；此操作不提交提问。'),
       !currentWorkspaceId ? h('p', { role: 'status', className: 'imqq-dialogHint' }, '当前会话尚未绑定可用的 DSH 工作区，请为新会话选择工作区。') : null,
-      h('label', { className: 'imqc-field' }, h('span', null, '工作区'), h(QQSelect, { label: '新 QQ 会话的工作区', value: workspaceId, onChange: setWorkspaceId, disabled: busy, placeholder: '选择工作区', options: workspaces.map(workspace => ({ value: workspace.workspaceId, label: `${qqWorkspaceTitle(workspace.title, workspace.path, defaultWorkspaceName)}${workspace.workspaceId === currentWorkspaceId ? '（当前）' : ''}`, description: workspace.path })) })),
+      h('label', { className: 'imqc-field' }, h('span', null, '工作区'), h(QQSelect, { label: '新 QQ 会话的工作区', value: workspaceId, disabled: busy || wsBusy, placeholder: wsBusy ? '处理中…' : '选择工作区', onChange: id => { if (id === ADD_WS) { addWorkspace(); return; } setWorkspaceId(id); }, options: [...workspaces.map(workspace => ({ value: workspace.workspaceId, label: `${qqWorkspaceTitle(workspace.title, workspace.path, defaultWorkspaceName)}${workspace.workspaceId === currentWorkspaceId ? '（当前）' : ''}`, description: workspace.path })), { value: ADD_WS, label: '＋ 添加工作区（选择文件夹…）' }] })),
       h('label', { className: 'imqc-field' }, h('span', null, 'Agent 预设'), h(QQSelect, { label: '新 QQ 会话的 Agent 预设', value: presetId, onChange: setPresetId, disabled: busy || loading, placeholder: loading ? '读取预设…' : '选择 Agent 预设', options: presets.map(preset => ({ value: preset.id, label: preset.name, description: preset.broken ?? (!allowedPresets.includes(preset.id) ? '此对话未授权' : preset.description), disabled: Boolean(preset.broken) || !allowedPresets.includes(preset.id) })) })),
       authorityMissing ? h('p', { role: 'status', className: 'imqq-dialogHint' }, '未取得此对话继承的预设授权，请刷新 QQ 目录后重试。') : null,
       changed ? h('p', { role: 'alert', className: 'imqq-dialogHint' }, '当前 QQ 会话或策略已变化，请关闭后重新打开操作。') : entry?.running ? h('p', { className: 'imqq-dialogHint' }, '当前会话正在回复，结束后可新建会话。') : !entry?.admitted ? h('p', { className: 'imqq-dialogHint' }, '请先授权此 QQ 对话。') : null,

@@ -5,7 +5,7 @@ import type { ConversationSandboxMode, SlashCommandDescriptor, ToolCatalogEntry 
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { defaultModelLabel, defaultPresetLabel, findModel, modelChoiceId, modelLabel, presetLabel } from './host-selectors.ts';
 import type { QQAgentCatalog } from './qq-agent-catalog.ts';
-import { QQSelect, type QQSelectOption } from './qq-controls.ts';
+import { QQSelect, qqWorkspaceTitle, type QQSelectOption } from './qq-controls.ts';
 
 const PERMISSIONS: ReadonlyArray<{ value: ConversationSandboxMode; label: string }> = [
   { value: 'read-only', label: '仅可查看' },
@@ -53,6 +53,12 @@ export interface QQAgentSettingsFormProps {
   readonly commands?: readonly SlashCommandDescriptor[];
   /** Open the Host directory picker to fill the working directory; omitted hides the browse button. */
   readonly onPickDirectory?: () => Promise<string | null>;
+  /** Existing DSH workspaces to offer in the working-directory selector. */
+  readonly workspaces?: ReadonlyArray<{ workspaceId: string; title: string; path: string }>;
+  /** Adopt a picked folder as a real workspace (native-aligned add flow). */
+  readonly onCreateWorkspace?: (path: string) => Promise<{ workspaceId: string; title: string; path: string }>;
+  /** Host default workspace name for display. */
+  readonly defaultWorkspaceName?: string;
   /** Which surface hosts this shared form; only changes tool-area copy. Defaults to 'conversation'. */
   readonly scope?: 'defaults' | 'conversation';
   /** The chat scope of the conversation this form edits (group vs c2c); drives which extra-prompt field shows. */
@@ -60,7 +66,8 @@ export interface QQAgentSettingsFormProps {
 }
 
 /** Draft fields only. The parent owns persistence, versions and conflict handling. */
-export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, scope = 'conversation', chatScope = 'group', onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
+export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, workspaces = [], onCreateWorkspace, defaultWorkspaceName = '默认工作区', scope = 'conversation', chatScope = 'group', onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
+  const [cwdBusy, setCwdBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [toolsOpen, setToolsOpen] = useState(false);
   // 首次进入"自定义工具"时的一次性引导（本组件实例内记忆，不写库）。
@@ -188,7 +195,17 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
       h('div', { className: 'imqc-actions imqc-toolPickerFoot' }, h(Button, { variant: 'primary', size: 'sm', onClick: () => setToolsOpen(false) }, '完成选择'))) }) : null),
     h('div', { className: 'imqc-field' }, h('span', null, '工作目录'),
       h('div', { className: 'imqc-inline' }, h(Input, { value: settings.cwd, disabled, placeholder: '留空使用 QQ 默认工作目录', 'aria-label': '工作目录', onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, cwd: event.target.value }) }),
-        onPickDirectory ? h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => { void onPickDirectory().then(path => { if (path) onChange({ ...settings, cwd: path }); }); } }, '选择目录…') : null)),
+        (onPickDirectory || onCreateWorkspace) ? h(Button, { variant: 'outline', size: 'sm', disabled: disabled || cwdBusy, onClick: () => {
+          if (!onPickDirectory) return;
+          setCwdBusy(true);
+          void onPickDirectory().then(async path => {
+            if (!path) return;
+            // 选文件夹：能创建/采用工作区就采用（对齐原生），否则直接作为目录。
+            if (onCreateWorkspace) { try { const ws = await onCreateWorkspace(path); onChange({ ...settings, cwd: ws.path }); return; } catch { /* 无法建区则退回纯路径 */ } }
+            onChange({ ...settings, cwd: path });
+          }).finally(() => setCwdBusy(false));
+        } }, cwdBusy ? '处理中…' : '选择文件夹…') : null)),
+      workspaces.length > 0 ? h(QQSelect, { label: '工作目录（从已有工作区选择）', value: workspaces.find(ws => ws.path === settings.cwd)?.workspaceId ?? '', disabled, placeholder: '从已有工作区选择（不改则手动填写）', options: workspaces.map(ws => ({ value: ws.workspaceId, label: `${qqWorkspaceTitle(ws.title, ws.path, defaultWorkspaceName)}`, description: ws.path })), onChange: id => { const ws = workspaces.find(x => x.workspaceId === id); if (ws) onChange({ ...settings, cwd: ws.path }); } }) : null,
     ((): ReactNode => {
       // 补充提示词按 scope 分离：会话设置只显示当前 scope；新对话默认值两个都显示。
       const field = (key: 'promptGroup' | 'promptDirect', label: string): ReactNode => h('label', { className: 'imqc-field', key }, h('span', null, label), h('textarea', { rows: 4, value: settings[key], disabled, maxLength: 20_000, 'aria-label': label, onChange: (event: ChangeEvent<HTMLTextAreaElement>) => onChange({ ...settings, [key]: event.target.value }) }));

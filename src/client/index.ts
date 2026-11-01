@@ -27,7 +27,7 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
 }
 
 export const name = 'im-qqbot-client';
-export const inject = ['slots', 'remote', 'remote.session', 'remote.agentPresets', 'remote.permissionPresets', 'locale', 'uiWorkspace'];
+export const inject = ['slots', 'remote', 'remote.session', 'remote.workspace', 'remote.agentPresets', 'remote.permissionPresets', 'locale', 'uiWorkspace'];
 
 /** 本插件包名（插件详情页按其匹配来源包，只在对应详情页渲染操作按钮） */
 const PACKAGE_NAME = '@tencent-connect/dsh-qqbot';
@@ -106,6 +106,11 @@ export function apply(ctx: Context): void {
     permissionCatalog: () => ctx.remote.permissionPresets.catalog(),
     modelCatalog: () => ctx.remote.session.modelCatalog(),
     pickDirectory: () => ctx.uiWorkspace.pickDirectory(),
+    createWorkspace: async (path: string) => {
+      const result = await ctx.remote.workspace.create({ path });
+      if (!result.ok) throw new Error(result.error.message);
+      return { workspaceId: String(result.value.workspace.workspaceId), title: result.value.workspace.title, path: result.value.workspace.path };
+    },
     listAgentPresets: async () => {
       const result = await ctx.remote.agentPresets.list();
       if (!result.ok) return result;
