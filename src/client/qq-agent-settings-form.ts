@@ -16,9 +16,30 @@ const CATEGORIES: Record<ToolCatalogEntry['category'], string> = { file: '文件
 
 /** 只读工具模板：只勾选"不会改动文件/不执行命令"的只读工具，且仅对当前目录实际可用的工具生效。 */
 const TOOL_PRESETS: ReadonlyArray<{ id: string; label: string; tools: readonly string[] }> = [
-  { id: 'read-files', label: '只读：文件与搜索', tools: ['read', 'read_image', 'grep', 'glob', 'qqbot_group_history'] },
-  { id: 'read-web', label: '只读 + 网页', tools: ['read', 'read_image', 'grep', 'glob', 'qqbot_group_history', 'web_search', 'web_fetch'] },
+  { id: 'read-files', label: '只读：文件与搜索', tools: ['skill', 'read', 'read_image', 'grep', 'glob', 'qqbot_group_history'] },
+  { id: 'read-web', label: '只读 + 网页', tools: ['skill', 'read', 'read_image', 'grep', 'glob', 'qqbot_group_history', 'web_search', 'web_fetch'] },
 ];
+
+/** 用户自建模板的本地存储键（按 store 维度不可用，模板是纯客户端偏好，存储在 localStorage）。 */
+const CUSTOM_PRESETS_KEY = 'im-qqbot/tool-presets/v1';
+interface CustomPreset { id: string; label: string; tools: string[] }
+function loadCustomPresets(): CustomPreset[] {
+  try {
+    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(CUSTOM_PRESETS_KEY);
+    const parsed: unknown = raw === null ? null : JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item): CustomPreset[] => {
+      if (item === null || typeof item !== 'object') return [];
+      const record = item as Record<string, unknown>;
+      if (typeof record.id !== 'string' || typeof record.label !== 'string' || !Array.isArray(record.tools)) return [];
+      return [{ id: record.id, label: record.label, tools: record.tools.filter((tool): tool is string => typeof tool === 'string') }];
+    });
+  } catch { return []; }
+}
+function saveCustomPresets(items: CustomPreset[]): boolean {
+  try { if (typeof localStorage !== 'undefined') { localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(items)); return true; } } catch { /* storage disabled */ }
+  return false;
+}
 
 export interface QQAgentSettingsFormProps {
   readonly settings: QQAgentSettings;
@@ -42,6 +63,8 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
   const [toolsOpen, setToolsOpen] = useState(false);
   // 首次进入"自定义工具"时的一次性引导（本组件实例内记忆，不写库）。
   const [toolGuideDismissed, setToolGuideDismissed] = useState(false);
+  const [customPresets, setCustomPresets] = useState<CustomPreset[]>(() => loadCustomPresets());
+  const [presetName, setPresetName] = useState('');
   const execution = settings.execution;
   const model = settings.model;
   const modelOptions: QQSelectOption[] = [{ value: 'inherit', label: defaultModelLabel(catalog.models) }];
@@ -72,6 +95,7 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
   const toggleCollapsed = (category: string): void => setCollapsedCats(prev => { const next = new Set(prev); if (next.has(category)) next.delete(category); else next.add(category); return next; });
   const setExecution = (next: QQExecutionSettings): void => onChange({ ...settings, execution: next });
   const setTools = (values: Iterable<string>): void => setExecution({ kind: 'custom', permission: execution.permission, tools: [...new Set(values)].sort() });
+  const persistCustomPresets = (next: CustomPreset[]): void => { setCustomPresets(next); saveCustomPresets(next); };
   // 选中的具体模型；未选（继承默认）时退回宿主默认模型，用它的 efforts 也能配推理强度。
   const currentChoice = model ? findModel(catalog.models, model) : (catalog.models?.defaultModel ? findModel(catalog.models, catalog.models.defaultModel) : undefined);
   const effortOptions: QQSelectOption[] = (currentChoice?.efforts ?? []).map(effort => ({ value: effort.id, label: effort.name, ...(effort.description === undefined ? {} : { description: effort.description }) }));
@@ -108,9 +132,21 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
       !toolGuideDismissed ? h('div', { className: 'imqc-toolGuide' }, h('p', null, scope === 'defaults' ? '这里的勾选只决定之后新接入对话的初始工具；已接入的对话各自独立。' : '这里的勾选只对当前这个群/联系人生效，其它群各自独立。'),
         h(Button, { variant: 'ghost', size: 'sm', onClick: () => setToolGuideDismissed(true) }, '知道了')) : null,
       h('p', { className: 'imqc-hint' }, '只开放下方勾选的工具；基础权限是这些工具之上的上限，文件、命令和网络操作仍受其限制，已有额外审批规则保留。'),
-      h('div', { className: 'imqc-inline imqc-presets' }, h('span', { className: 'imqc-hint' }, '快速模板：'),
-        ...TOOL_PRESETS.map(preset => h(Button, { key: preset.id, variant: 'outline', size: 'sm', disabled,
-          onClick: () => setTools(preset.tools.filter(id => available.some(tool => tool.id === id && tool.available))) }, preset.label))),
+      h('div', { className: 'imqc-presets' }, h('span', { className: 'imqc-hint' }, '快速模板：'),
+        h('div', { className: 'imqc-inline' },
+          ...TOOL_PRESETS.map(preset => h(Button, { key: preset.id, variant: 'outline', size: 'sm', disabled,
+            onClick: () => setTools(preset.tools.filter(id => available.some(tool => tool.id === id && tool.available))) }, preset.label)),
+          ...customPresets.map(preset => h('span', { className: 'imqc-presetUser', key: preset.id },
+            h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => setTools(preset.tools.filter(id => available.some(tool => tool.id === id && tool.available))) }, preset.label),
+            h('button', { type: 'button', className: 'imqc-presetDel', 'aria-label': `删除模板 ${preset.label}`, disabled, onClick: () => persistCustomPresets(customPresets.filter(item => item.id !== preset.id)) }, '×')))),
+        h('div', { className: 'imqc-inline imqc-presetSave' },
+          h(Input, { value: presetName, disabled, placeholder: '把当前选择存为模板…', 'aria-label': '新模板名称', onChange: (event: ChangeEvent<HTMLInputElement>) => setPresetName(event.target.value) }),
+          h(Button, { variant: 'outline', size: 'sm', disabled: disabled || selected.size === 0 || presetName.trim() === '', onClick: () => {
+            const label = presetName.trim();
+            if (!label) return;
+            persistCustomPresets([...customPresets, { id: `u${Date.now()}`, label, tools: [...selected].sort() }]);
+            setPresetName('');
+          } }, '存为模板'))),
       h('div', { className: 'imqc-field' }, h('span', null, '基础上限'), h(QQSelect, { label: '自定义工具的基础权限', value: execution.permission, options: PERMISSIONS, disabled, onChange: value => { const permission = PERMISSIONS.find(item => item.value === value)?.value; if (permission) setExecution({ ...execution, permission }); } })),
       h('div', { className: 'imqc-field' }, h('span', null, `已允许的工具（${selected.size}）`),
         selected.size === 0

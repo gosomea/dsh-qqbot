@@ -78,8 +78,13 @@ export function installConversationStyles(): void {
 .imqc-cmdRow code { font-size: 12px; color: var(--dsw-alias-label-primary); }
 .imqc-toolGuide { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0 8px; padding: 8px 10px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); }
 .imqc-toolGuide > p { flex: 1; min-width: 0; margin: 0; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
-.imqc-presets { margin: 2px 0 8px; }
+.imqc-presets { margin: 2px 0 8px; display: flex; flex-direction: column; gap: 6px; }
 .imqc-presets > .imqc-hint { flex: none; }
+.imqc-presetUser { display: inline-flex; align-items: center; gap: 2px; }
+.imqc-presetDel { border: 0; background: transparent; color: var(--dsw-alias-label-tertiary); font-size: 14px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.imqc-presetDel:disabled { opacity: .4; cursor: default; }
+.imqc-presetSave { flex-wrap: nowrap; }
+.imqc-presetSave > :first-child { flex: 1; min-width: 120px; }
 .imqc-tool { display: grid; grid-template-columns: minmax(0,1fr) 90px; gap: 10px; align-items: start; padding-top: 12px; }
 .imqc-toolCheckbox > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .imqc-tool small { margin-top: 2px; }
