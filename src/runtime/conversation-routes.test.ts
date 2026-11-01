@@ -70,7 +70,8 @@ describe('recording through the real recording route', () => {
     for (let index = 1; index <= 4; index++) f.service.store.recordMessage(f.key, { id: `in-${index}`, senderId: 'actor', senderName: '', text: `body-${index}`, at: Date.now(), mentioned: false, attachments: [] });
     const reopened = new ConversationStore(f.data, 'admission');
     expect(reopened.get(f.key)?.recording).toMatchObject({ enabled: true, maxMessages: 3, retentionDays: 0 });
-    expect(reopened.timeline(f.key).items.map(row => row.direction === 'inbound' ? row.message.id : row.delivery.id)).toEqual(['in-4', 'in-3', 'in-2']);
+    // 记录默认不再按条数清理：即使设置了 maxMessages=3，也全部保留。
+    expect(reopened.timeline(f.key).items.map(row => row.direction === 'inbound' ? row.message.id : row.delivery.id)).toEqual(['in-4', 'in-3', 'in-2', 'in-1']);
     expect(f.service.requireEntry(f.key).policy).toEqual(before.policy);
     expect(f.agent.cancel).not.toHaveBeenCalled();
   });

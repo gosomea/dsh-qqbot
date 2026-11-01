@@ -744,7 +744,7 @@ export class ConversationStore {
   private prune(key: string, retentionDays: number): void {
     this.assertWritable();
     const now = this.now();
-    const recording = this.recording(this.require(key));
+    this.require(key);
     // 记录默认不按条数清理：只按 retentionDays（历史遗留，通常为 0=不清理）过期，不做数量淘汰。
     if (now - (this.lastPrune.get(key) ?? 0) < 3_600_000) return;
     const cutoff = retentionDays > 0 ? now - retentionDays * 86_400_000 : -Infinity;

@@ -413,7 +413,7 @@ describe('independent durable QQ recording and timeline', () => {
     const target = store();
     for (const scope of ['group', 'c2c'] as const) {
       const entry = target.ensure(scope, scope);
-      expect(entry.recording).toEqual({ version: 1, enabled: true, since: now, retentionDays: 0, maxMessages: 1000 });
+      expect(entry.recording).toEqual({ version: 1, enabled: true, since: now, retentionDays: 0 });
       const changed = target.updateRecording(entry.key, 1, { enabled: false, retentionDays: 3 });
       expect(changed.recording).toEqual({ version: 2, enabled: false, since: now, retentionDays: 3 });
       expect(changed.policy).toEqual(entry.policy);

@@ -45,7 +45,9 @@ describe('QQ settings and message pages', () => {
     // 斜杠命令清单是唯一新增的可折叠区（来自命令注册表）
     expect(container.querySelectorAll('details').length).toBe(1);
     expect(container.querySelector('details.imqc-cmdList')).not.toBeNull();
-    expect(container.querySelector('input[aria-label="保留消息记录条数"]').value).toBe('1000');
+    // 记录默认全部保留：无"保留条数"输入，改为"清空消息记录"按钮。
+    expect(container.querySelector('input[aria-label="保留消息记录条数"]')).toBeNull();
+    expect(container.textContent).toContain('清空消息记录');
     expect(container.textContent).not.toContain('自动换新');
     expect(perform).not.toHaveBeenCalled();
   });
