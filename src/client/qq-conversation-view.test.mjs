@@ -124,7 +124,9 @@ describe('QQ timeline behavior', () => {
       .mockResolvedValueOnce({ timeline: { items: [{ ...inbound, order: 1, change: 1, message: { ...inbound.message, id: 'old', text: '旧消息' } }], snapshot: 3, nextAfter: 3, hasMore: false } })
       .mockResolvedValueOnce({ timeline: { items: [{ ...outbound, change: 4, delivery: { ...outbound.delivery, state: 'failed', updatedAt: 4, parts: [{ index: 0, state: 'failed' }], error: 'QQ 40034025: msg_id expired' } }], snapshot: 4, nextAfter: 4, hasMore: false } });
     await act(async () => root.render(h(QQMessageTimeline, { entry, store })));
-    expect(container.querySelectorAll('.imqc-timelineMessage')).toHaveLength(2); expect(container.textContent).toContain('网页显式发送');
+    expect(container.querySelectorAll('.imqc-timelineMessage')).toHaveLength(2);
+    // 健康投递不再显示技术详情（provenance/接口接受等）；只保留正文。
+    expect(container.textContent).not.toContain('网页显式发送');
     await click('读取更早记录'); expect(perform.mock.calls[1][0]).toMatchObject({ before: 2, snapshot: 3 });
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     expect(perform.mock.calls[2][0]).toMatchObject({ after: 3 }); expect(container.querySelectorAll('.imqc-timelineMessage')).toHaveLength(3);

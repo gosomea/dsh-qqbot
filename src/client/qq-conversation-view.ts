@@ -141,14 +141,19 @@ export function QQMessageTimeline({ entry, store }: { entry: ConversationView; s
           incoming && item.message.attachments.length ? h('p', { className: 'imqc-hint' }, item.message.attachments.map(attachment => `[${attachment.type}] ${attachment.name}`).join('、')) : null,
           failed ? h('p', { className: 'imqc-error imqc-messageWarn', role: 'alert' }, item.delivery.state === 'failed' ? '发送失败' : '结果未知（可能部分已发出，请核对 QQ）') : null),
         h('div', { className: 'imqc-messageAside' },
-          !incoming ? h('details', { className: 'imqc-msgInfo' }, h('summary', { title: '发送与来源详情', 'aria-label': '发送与来源详情' }, 'ⓘ'),
+          // 只在发送失败/结果未知时提供诊断详情（成功消息无需技术信息）。
+          failed ? h('details', { className: 'imqc-msgInfo' }, h('summary', { title: '发送详情', 'aria-label': '发送详情' }, 'ⓘ'),
             h('div', { className: 'imqc-msgInfoBody' },
               h('p', { className: 'imqc-hint' }, deliverySummary(item.delivery)),
               h('p', { className: 'imqc-hint' }, deliveryExplanation(item.delivery)),
               h('p', { className: 'imqc-hint' }, `来源：${provenance}`),
               ...item.delivery.parts.map(part => h('p', { key: part.index, className: 'imqc-hint' }, `分段 ${part.index + 1}：${part.state}`)),
               item.delivery.error ? h('p', { role: 'alert', className: 'imqc-error' }, item.delivery.error) : null)) : null,
-          session ? h(Button, { variant: 'ghost', size: 'sm', className: 'imqc-jumpTurn', 'aria-label': '在原生会话中查看此消息', title: '在原生会话中查看此消息', onClick: () => store.openSession(session) }, '↗') : null));
+          ((): ReactNode => {
+            // 跳转到包含该消息的原生会话；若该 session 不在当前目录（历史被裁剪等），回退到该对话的当前会话，避免落到无 QQ 设置视图的孤儿 session。
+            const target = session && store.entry(session) ? session : entry.currentSessionId;
+            return target ? h(Button, { variant: 'ghost', size: 'sm', className: 'imqc-jumpTurn', 'aria-label': '在原生会话中查看此消息', title: '在原生会话中查看此消息', onClick: () => store.openSession(target) }, '↗') : null;
+          })()));
     })),
     page && visible.length === 0 ? h('p', { className: 'imqc-hint' }, '没有匹配的消息记录。开启记录后，仅保存机器人实际收到的 QQ 消息与投递。') : null);
 }
