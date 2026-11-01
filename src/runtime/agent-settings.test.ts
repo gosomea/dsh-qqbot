@@ -44,22 +44,23 @@ function fixture() {
 }
 
 describe('idle per-peer Agent settings', () => {
-  it('applies model and public native mode setters while deferring prompt, cwd and preset to the next Session', async () => {
+  it('applies model and native setters; extra prompt applies immediately while cwd/preset defer to the next Session', async () => {
     const f = fixture(); const before = f.service.requireEntry(f.key);
-    const settings = { ...before.settings!, model: { provider: 'p', model: 'new' }, prompt: 'next prompt', cwd: '/tmp/next-cwd', preset: 'chosen', execution: { kind: 'native' as const, permission: 'workspace-write' as const }, slashCommands: false };
+    const settings = { ...before.settings!, model: { provider: 'p', model: 'new' }, promptGroup: 'next prompt', cwd: '/tmp/next-cwd', preset: 'chosen', execution: { kind: 'native' as const, permission: 'workspace-write' as const }, slashCommands: false };
     const notice = await f.service.saveSettings(f.key, before.policy.version, settings, 'alias', true);
     expect(notice).toContain('新会话生效');
     expect(f.select).toHaveBeenCalledExactlyOnceWith(settings.model);
     expect(f.session.snapshotEvents()).toContainEqual(expect.objectContaining({ type: 'sandbox/mode', data: { mode: 'workspace-write' } }));
     expect(f.session.snapshotEvents()).toContainEqual(expect.objectContaining({ type: 'approval/policy', data: { policy: 'ask' } }));
-    expect(f.service.rolePrompt(f.session.id)).toBe('old scope');
+    // 补充提示词即时生效：保存后当前 session 的人设 prompt 立刻反映新值。
+    expect(f.service.rolePrompt(f.session.id)).toContain('next prompt');
     expect(f.service.requireEntry(f.key).currentSessionId).toBe(f.session.id);
     expect(f.service.requireEntry(f.key).settings).toEqual(settings);
     expect(f.agent.cancel).not.toHaveBeenCalled();
     expect(f.service.slashAllowed('group', 'g', 'actor')).toBe(false);
     f.service.store.setOwnerIds(['superadmin']);
     expect(f.service.slashAllowed('group', 'g', 'superadmin')).toBe(true);
-    f.service.store.bindSession(f.key, 'next'); expect(f.service.rolePrompt('next')).toBe('next prompt');
+    f.service.store.bindSession(f.key, 'next'); expect(f.service.rolePrompt('next')).toContain('next prompt');
   });
   it('rejects busy edits and recording conflicts before changing live or persisted settings', async () => {
     const f = fixture(); const before = f.service.requireEntry(f.key);

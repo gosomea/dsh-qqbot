@@ -55,10 +55,12 @@ export interface QQAgentSettingsFormProps {
   readonly onPickDirectory?: () => Promise<string | null>;
   /** Which surface hosts this shared form; only changes tool-area copy. Defaults to 'conversation'. */
   readonly scope?: 'defaults' | 'conversation';
+  /** The chat scope of the conversation this form edits (group vs c2c); drives which extra-prompt field shows. */
+  readonly chatScope?: 'group' | 'c2c';
 }
 
 /** Draft fields only. The parent owns persistence, versions and conflict handling. */
-export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, scope = 'conversation', onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
+export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, scope = 'conversation', chatScope = 'group', onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
   const [query, setQuery] = useState('');
   const [toolsOpen, setToolsOpen] = useState(false);
   // 首次进入"自定义工具"时的一次性引导（本组件实例内记忆，不写库）。
@@ -187,7 +189,11 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
     h('div', { className: 'imqc-field' }, h('span', null, '工作目录'),
       h('div', { className: 'imqc-inline' }, h(Input, { value: settings.cwd, disabled, placeholder: '留空使用 QQ 默认工作目录', 'aria-label': '工作目录', onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, cwd: event.target.value }) }),
         onPickDirectory ? h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => { void onPickDirectory().then(path => { if (path) onChange({ ...settings, cwd: path }); }); } }, '选择目录…') : null)),
-    h('label', { className: 'imqc-field' }, h('span', null, '补充提示词'), h('textarea', { rows: 4, value: settings.prompt, disabled, maxLength: 20_000, 'aria-label': '补充提示词', onChange: (event: ChangeEvent<HTMLTextAreaElement>) => onChange({ ...settings, prompt: event.target.value }) })),
+    ((): ReactNode => {
+      // 补充提示词按 scope 分离：会话设置只显示当前 scope；新对话默认值两个都显示。
+      const field = (key: 'promptGroup' | 'promptDirect', label: string): ReactNode => h('label', { className: 'imqc-field', key }, h('span', null, label), h('textarea', { rows: 4, value: settings[key], disabled, maxLength: 20_000, 'aria-label': label, onChange: (event: ChangeEvent<HTMLTextAreaElement>) => onChange({ ...settings, [key]: event.target.value }) }));
+      return scope === 'defaults' ? [field('promptGroup', '群聊补充提示词'), field('promptDirect', '私聊补充提示词')] : (chatScope === 'group' ? field('promptGroup', '群聊补充提示词') : field('promptDirect', '私聊补充提示词'));
+    })(),
     h('div', { className: 'imqc-inline' }, h('span', null, '斜杠命令'), h(Switch, { label: '斜杠命令', checked: settings.slashCommands, disabled, onChange: slashCommands => onChange({ ...settings, slashCommands }) })),
     h('p', { className: 'imqc-hint' }, '关闭后，普通用户的 / 命令返回停用提示；机器人所有者仍可使用命令。'),
     h('details', { className: 'imqc-cmdList' }, h('summary', null, `查看支持的斜杠命令（${commands.length} 个）`),

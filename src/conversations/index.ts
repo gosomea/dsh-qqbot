@@ -161,7 +161,7 @@ export class ConversationStore {
     if (!sessionId || sessionId.length > 1_024) throw new TypeError('Invalid QQ Session identity');
     const other = this.catalog.entries.find((item) => item.key !== key && item.sessions.some((session) => session.sessionId === sessionId));
     if (other) throw new Error('QQ Session already belongs to another conversation');
-    if (!entry.sessions.some((item) => item.sessionId === sessionId)) entry.sessions.push({ sessionId, startedAt: this.now(), receivedMessages: 0, role: clone(entry.policy.role), ...(entry.settings ? { prompt: entry.settings.prompt } : {}) });
+    if (!entry.sessions.some((item) => item.sessionId === sessionId)) entry.sessions.push({ sessionId, startedAt: this.now(), receivedMessages: 0, role: clone(entry.policy.role), ...(entry.settings ? { prompt: entry.scope === 'group' ? entry.settings.promptGroup : entry.settings.promptDirect } : {}) });
     if (entry.currentSessionId && entry.currentSessionId !== sessionId) {
       const previous = entry.sessions.find(item => item.sessionId === entry.currentSessionId);
       if (previous) previous.endedAt = this.now();
@@ -192,7 +192,7 @@ export class ConversationStore {
     entry.policy = { ...checked, version: expectedVersion + 1 };
     if (entry.settings) {
       const legacy = this.projectSettings(entry);
-      entry.settings = { ...entry.settings, cwd: checked.cwd, ...(changedRole ? { prompt: legacy.prompt } : {}), execution: legacy.execution };
+      entry.settings = { ...entry.settings, cwd: checked.cwd, ...(changedRole ? { promptGroup: legacy.promptGroup, promptDirect: legacy.promptDirect } : {}), execution: legacy.execution };
     }
     if (alias !== undefined) {
       if (typeof alias !== 'string' || alias.length > 300) throw new TypeError('QQ alias is too long');
@@ -541,7 +541,8 @@ export class ConversationStore {
   }
   private projectSettings(entry: ConversationEntry): QQAgentSettings {
     if (this.options.projectSettings) return validateQQAgentSettings(this.options.projectSettings(clone(entry)));
-    return { ...defaultQQAgentSettings(), cwd: entry.policy.cwd, prompt: [entry.policy.role.description, entry.policy.role.tone && `语气：${entry.policy.role.tone}`, entry.policy.role.world && `世界观：${entry.policy.role.world}`, entry.policy.role.prompt].filter(Boolean).join('\n'), execution: entry.policy.nativeTools ? { kind: 'native', permission: entry.policy.resources.sandbox } : { kind: 'custom', permission: entry.policy.resources.sandbox, tools: Object.entries(entry.policy.tools).filter(([, decision]) => decision !== 'deny').map(([id]) => id) } };
+    // 人设由 personaCardOf(policy.role) 提供；此兜底不再烘焙 prompt。
+    return { ...defaultQQAgentSettings(), cwd: entry.policy.cwd, promptGroup: '', promptDirect: '', execution: entry.policy.nativeTools ? { kind: 'native', permission: entry.policy.resources.sandbox } : { kind: 'custom', permission: entry.policy.resources.sandbox, tools: Object.entries(entry.policy.tools).filter(([, decision]) => decision !== 'deny').map(([id]) => id) } };
   }
   private settingsPolicy(before: ConversationPolicy, settings: QQAgentSettings): ConversationPolicy {
     const permission = settings.execution.permission;
@@ -560,7 +561,7 @@ export class ConversationStore {
       entry.settings = this.projectSettings(entry);
       for (const row of entry.sessions) if (row.prompt === undefined) {
         const historical = { ...entry, policy: { ...entry.policy, role: row.role ?? entry.policy.role } };
-        row.prompt = this.projectSettings(historical).prompt;
+        row.prompt = entry.scope === 'group' ? this.projectSettings(historical).promptGroup : this.projectSettings(historical).promptDirect;
       }
       changed = true;
     }

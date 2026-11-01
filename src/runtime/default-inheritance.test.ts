@@ -28,9 +28,9 @@ it('clears hidden legacy defaults for new peers while preserving existing snapsh
     await service.saveDefaults(service.store.defaults().version, cleared);
     const fresh = service.entry('group', 'fresh');
     // Inherit host default stored as null; the host model resolves at use time via getEffectiveModel.
-    expect(fresh.settings).toMatchObject({ prompt: '', preset: 'host-preset', model: null });
+    expect(fresh.settings).toMatchObject({ promptGroup: '', preset: 'host-preset', model: null });
     expect(manager.getEffectiveModel('group', 'fresh')).toEqual(route);
-    expect(service.entry('c2c', 'fresh-private').settings?.prompt).toBe('');
+    expect(service.entry('c2c', 'fresh-private').settings?.promptDirect).toBe('');
     expect(service.requireEntry(prior.key).settings).toEqual(prior.settings);
     service.store.updateSettings(fresh.key, fresh.policy.version, cleared, '', true);
     expect(manager.getEffectiveModel('group', 'fresh')).toEqual(route);

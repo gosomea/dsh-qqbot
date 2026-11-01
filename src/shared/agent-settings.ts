@@ -10,7 +10,10 @@ export interface QQAgentSettings {
   model: { provider: string; model: string; reasoningEffort?: import('@deepseek-ai/dsh-llm').ReasoningEffortId } | null;
   /** Reasoning effort applied to the inherited default model when `model` is null. Ignored when a concrete model carries its own effort. */
   reasoningEffort?: import('@deepseek-ai/dsh-llm').ReasoningEffortId;
-  prompt: string;
+  /** 群聊补充提示词（只对群聊生效）。 */
+  promptGroup: string;
+  /** 私聊补充提示词（只对私聊生效）。 */
+  promptDirect: string;
   cwd: string;
   execution: QQExecutionSettings;
   slashCommands: boolean;
@@ -22,7 +25,7 @@ export interface QQDefaults {
 }
 
 export function defaultQQAgentSettings(): QQAgentSettings {
-  return { preset: '', model: null, prompt: '', cwd: '', execution: { kind: 'native', permission: 'read-only' }, slashCommands: true };
+  return { preset: '', model: null, promptGroup: '', promptDirect: '', cwd: '', execution: { kind: 'native', permission: 'read-only' }, slashCommands: true };
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -63,7 +66,11 @@ export function validateQQAgentSettings(value: unknown): QQAgentSettings {
   if (cwd && !cwd.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(cwd)) throw new TypeError('工作目录必须使用绝对路径');
   if (typeof data.slashCommands !== 'boolean') throw new TypeError('QQ 斜杠命令开关无效');
   const defaultEffort = data.reasoningEffort === undefined || data.reasoningEffort === null ? undefined : text(data.reasoningEffort, '推理强度', 64).trim();
-  return { preset: text(data.preset, 'Agent 预设', 256).trim(), model, ...(defaultEffort ? { reasoningEffort: defaultEffort as ReasoningEffortId } : {}), prompt: text(data.prompt, '提示词', 80000), cwd, execution: checkedExecution, slashCommands: data.slashCommands };
+  // 迁移期：旧 prompt 归入当前 scope 由调用方处理；校验层把旧 prompt 同时落到两个字段可见处由上层决定。
+  const legacyPrompt = data.prompt === undefined ? undefined : text(data.prompt, '提示词', 80000);
+  const promptGroup = data.promptGroup === undefined ? (legacyPrompt ?? '') : text(data.promptGroup, '群聊补充提示词', 80000);
+  const promptDirect = data.promptDirect === undefined ? (legacyPrompt ?? '') : text(data.promptDirect, '私聊补充提示词', 80000);
+  return { preset: text(data.preset, 'Agent 预设', 256).trim(), model, ...(defaultEffort ? { reasoningEffort: defaultEffort as ReasoningEffortId } : {}), promptGroup, promptDirect, cwd, execution: checkedExecution, slashCommands: data.slashCommands };
 }
 
 export function validateQQDefaults(value: unknown): QQDefaults {

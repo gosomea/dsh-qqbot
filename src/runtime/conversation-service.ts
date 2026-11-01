@@ -88,10 +88,10 @@ export class ConversationService {
       policy.allowedModels = [`${route.provider}/${route.model}`];
       policy.allowedPresets = [manager.getDefaultPreset?.() || 'standard'];
       return policy;
-    }, defaultSettings: () => ({ ...defaultQQAgentSettings(), preset: config.preset?.trim() || '', model: config.provider && config.model ? { provider: config.provider, model: config.model } : null, cwd: config.cwd || '', prompt: config.groupPrompt || config.directPrompt || '' }),
+    }, defaultSettings: () => ({ ...defaultQQAgentSettings(), preset: config.preset?.trim() || '', model: config.provider && config.model ? { provider: config.provider, model: config.model } : null, cwd: config.cwd || '', promptGroup: config.groupPrompt || '', promptDirect: config.directPrompt || '' }),
       // Keep model === null as "inherit host default"; the default reasoning effort rides on settings.reasoningEffort.
       resolveSettings: settings => ({ ...settings, preset: settings.preset || manager.getDefaultPreset?.() || '', cwd: settings.cwd || resolveAgentCwd(config.cwd) }),
-      projectSettings: entry => ({ ...defaultQQAgentSettings(), preset: manager.getEffectivePreset?.(entry.scope, entry.peerId) || manager.getDefaultPreset?.() || config.preset || '', model: manager.getEffectiveModel?.(entry.scope, entry.peerId) ?? manager.getDefaultModel(), cwd: entry.policy.cwd || resolveAgentCwd(config.cwd), prompt: [(entry.scope === 'group' ? config.groupPrompt : config.directPrompt), this.describeRole(entry.policy.role)].filter(Boolean).join('\n'), execution: entry.policy.nativeTools === true ? { kind: 'native', permission: entry.policy.resources.sandbox } : { kind: 'custom', permission: entry.policy.resources.sandbox, tools: Object.entries(entry.policy.tools).filter(([, decision]) => decision !== 'deny').map(([id]) => id) } }),
+      projectSettings: entry => ({ ...defaultQQAgentSettings(), preset: manager.getEffectivePreset?.(entry.scope, entry.peerId) || manager.getDefaultPreset?.() || config.preset || '', model: manager.getEffectiveModel?.(entry.scope, entry.peerId) ?? manager.getDefaultModel(), cwd: entry.policy.cwd || resolveAgentCwd(config.cwd), promptGroup: config.groupPrompt || '', promptDirect: config.directPrompt || '', execution: entry.policy.nativeTools === true ? { kind: 'native', permission: entry.policy.resources.sandbox } : { kind: 'custom', permission: entry.policy.resources.sandbox, tools: Object.entries(entry.policy.tools).filter(([, decision]) => decision !== 'deny').map(([id]) => id) } }),
     });
     this.store.migratePrefs();
     this.selfIds.add(config.appId);
@@ -224,7 +224,7 @@ export class ConversationService {
       protectedDescendant: agent => this.protectedDescendant(entry.key, agent),
       onDenied: (tool: string, reason: string) => this.logger.warn(`QQ tool policy denied: ${tool} ${reason}`),
     }));
-    this.installAgentPrompt(record, entry.key);
+    this.installAgentPrompt(record.agent, record.sessionId, entry.key);
     this.store.bindSession(entry.key, record.sessionId, workspaceId, record.agent.session.header?.cwd, presetId);
     this.attached.add(record.agent);
   }
@@ -298,7 +298,7 @@ export class ConversationService {
       const nextGuard = installPolicy(record.agent.ctx, { agentId: record.sessionId, getPolicy: () => this.effectivePolicy(key, record.sessionId), getCatalog: () => [...this.catalogs.values()], protectedDescendant: agent => this.protectedDescendant(key, agent) });
       this.policyDisposers.get(record.sessionId)?.();
       this.policyDisposers.set(record.sessionId, nextGuard);
-      this.installAgentPrompt(record, key);
+      this.installAgentPrompt(record.agent, record.sessionId, key);
     }
   }
   private applyExecutionPolicy(record: SessionRecord, policy: ConversationPolicy, force = false): void {
@@ -493,10 +493,10 @@ export class ConversationService {
     if (record && executionChanged) {
       this.policyDisposers.get(record.sessionId)?.();
       this.policyDisposers.set(record.sessionId, installPolicy(record.agent.ctx, { agentId: record.sessionId, getPolicy: () => this.effectivePolicy(key, record.sessionId), getCatalog: () => [...this.catalogs.values()], protectedDescendant: agent => this.protectedDescendant(key, agent) }));
-      this.installAgentPrompt(record, key);
+      this.installAgentPrompt(record.agent, record.sessionId, key);
     }
     this.pruneExpired();
-    const nextSession = before.settings?.prompt !== settings.prompt || before.settings?.cwd !== settings.cwd || before.settings?.preset !== settings.preset;
+    const nextSession = before.settings?.cwd !== settings.cwd || before.settings?.preset !== settings.preset;
     return [nextSession ? '设置已保存。提示词、工作目录和 Agent 预设将在新会话生效；当前上下文保留。可点击新会话立即应用。' : '', receiveEnabled && !this.admitted(before.scope, before.peerId) ? '此对话仍被全局访问规则阻止。请使用启用对话操作配置访问规则，或在连接设置中允许此 QQ 标识。' : ''].filter(Boolean).join('\n') || undefined;
   }
   recordModelSetting(scope: ChatScope, peerId: string, model: QQAgentSettings['model']): void {
@@ -688,17 +688,15 @@ export class ConversationService {
     let id: string | undefined = sessionId;
     while (id && !visited.has(id)) {
       visited.add(id);
-      const entry = this.store.getBySessionId(id);
-      if (entry) {
-        const row = entry.sessions.find(row => row.sessionId === id);
-        if (row?.prompt !== undefined) return row.prompt;
-        return [entry.scope === 'group' ? this.config.groupPrompt : this.config.directPrompt, this.describeRole(row?.role ?? entry.policy.role)].filter(Boolean).join('\n');
+      const found = this.store.getBySessionId(id);
+      if (found) {
+        const extra = found.scope === 'group' ? found.settings?.promptGroup ?? '' : found.settings?.promptDirect ?? '';
+        return [this.personaCardOf(found), extra].filter(Boolean).join('\n');
       }
       id = this.ctx.get('sessions')?.get(SessionId(id))?.header.parentSession;
     }
     return '';
   }
-  private describeRole(role: ConversationPolicy['role']): string { return [role.description, role.tone && `语气：${role.tone}`, role.world && `世界观：${role.world}`, role.prompt].filter(Boolean).join('\n'); }
 
   /** 从对话条目派生 prompt 数据（惰性：persona/extra 均每步现读 entry）。 */
   private promptEntryData(key: string): QQPromptEntry {
@@ -721,13 +719,9 @@ export class ConversationService {
   }
   /** 补充提示词：新字段 promptGroup/promptDirect；旧 settings.prompt 迁移期按 scope 归入。 */
   private extraPromptsOf(entry: ConversationEntry): { group?: string; direct?: string } {
-    const settings = entry.settings as (typeof entry.settings & { promptGroup?: string; promptDirect?: string }) | undefined;
+    const settings = entry.settings;
     if (!settings) return {};
-    const legacy = (settings as { prompt?: string }).prompt ?? '';
-    return {
-      group: settings.promptGroup ?? (entry.scope === 'group' ? legacy : undefined),
-      direct: settings.promptDirect ?? (entry.scope === 'c2c' ? legacy : undefined),
-    };
+    return { group: settings.promptGroup, direct: settings.promptDirect };
   }
   /** 记录本轮元信息（来源/@/发送者/时间），供 turn-meta runtime context 在组装时读取。 */
   setTurnMeta(key: string, meta: import('../prompt/index.ts').TurnMeta): void {
@@ -736,10 +730,10 @@ export class ConversationService {
     this.promptHandles.get(sessionId)?.setTurnMeta(meta);
   }
   /** 安装（或重装）某 agent 的 QQ prompt sections/contexts。 */
-  private installAgentPrompt(record: SessionRecord, key: string): void {
-    this.promptHandles.get(record.sessionId)?.dispose();
+  private installAgentPrompt(agent: { ctx: Context }, sessionId: string, key: string): void {
+    this.promptHandles.get(sessionId)?.dispose();
     try {
-      this.promptHandles.set(record.sessionId, installQQPrompt(record.agent.ctx, this.promptEntryData(key)));
+      this.promptHandles.set(sessionId, installQQPrompt(agent.ctx, this.promptEntryData(key)));
     } catch (error) {
       this.logger.warn(`QQ prompt 注入失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -865,6 +859,7 @@ export class ConversationService {
     });
     this.policyDisposers.get(agent.id)?.();
     this.policyDisposers.set(agent.id, dispose);
+    this.installAgentPrompt(agent, agent.id, key);
     this.attached.add(agent);
   }
   release(_sessionId: string): void {

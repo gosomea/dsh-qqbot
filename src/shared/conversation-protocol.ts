@@ -6,7 +6,8 @@ export type PolicyTemplate = 'chat' | 'roleplay' | 'readonly' | 'project' | 'cus
 export type ContextMode = 'interaction' | 'recent' | 'archive';
 export type ConversationToolMode = 'restricted' | 'native';
 export type ConversationSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
-export interface RoleSettings { description: string; tone: string; world: string; prompt: string }
+/** 角色设定。card 为 role-card markdown（可用 〔群聊〕/〔私聊〕 分节）；其余字段在 card 为空时兜底生成。 */
+export interface RoleSettings { description: string; tone: string; world: string; prompt: string; card?: string }
 export interface ResourcePolicy {
   readRoots: string[]; writeRoots: string[]; sendRoots: string[];
   executionEnabled: boolean; sandbox: ConversationSandboxMode;

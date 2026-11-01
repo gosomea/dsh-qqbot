@@ -14,7 +14,7 @@ describe('QQ account defaults and per-peer settings', () => {
   it('persists versioned defaults for new peers without altering existing group or private peers', () => {
     const { root, store } = fixture();
     const group = store.ensure('group', 'old-group'); const direct = store.ensure('c2c', 'old-person');
-    const settings = { ...defaultQQAgentSettings(), preset: 'new-agent', model: { provider: 'p', model: 'm' }, cwd: '/tmp/new', prompt: 'new prompt', slashCommands: false };
+    const settings = { ...defaultQQAgentSettings(), preset: 'new-agent', model: { provider: 'p', model: 'm' }, cwd: '/tmp/new', promptGroup: 'new prompt', slashCommands: false };
     store.updateDefaults(1, settings);
     expect(store.get(group.key)).toEqual(group); expect(store.get(direct.key)).toEqual(direct);
     const reloaded = new ConversationStore(root, 'account');
@@ -27,12 +27,12 @@ describe('QQ account defaults and per-peer settings', () => {
     const { store } = fixture();
     const discovered = store.ensure('group', 'blocked', { admitted: false });
     expect(discovered.defaultsPending).toBe(true);
-    store.updateDefaults(1, { ...defaultQQAgentSettings(), prompt: 'latest before admission' });
-    expect(store.ensure('group', 'blocked', { admitted: false }).settings?.prompt).toBe('');
+    store.updateDefaults(1, { ...defaultQQAgentSettings(), promptGroup: 'latest before admission' });
+    expect(store.ensure('group', 'blocked', { admitted: false }).settings?.promptGroup).toBe('');
     const admitted = store.ensure('group', 'blocked', { admitted: true });
-    expect(admitted.settings?.prompt).toBe('latest before admission'); expect(admitted.defaultsPending).toBe(false);
-    store.updateDefaults(2, { ...defaultQQAgentSettings(), prompt: 'later global edit' });
-    expect(store.ensure('group', 'blocked', { admitted: true }).settings?.prompt).toBe('latest before admission');
+    expect(admitted.settings?.promptGroup).toBe('latest before admission'); expect(admitted.defaultsPending).toBe(false);
+    store.updateDefaults(2, { ...defaultQQAgentSettings(), promptGroup: 'later global edit' });
+    expect(store.ensure('group', 'blocked', { admitted: true }).settings?.promptGroup).toBe('latest before admission');
   });
   it('migrates an old restricted policy to native tools on load and applies permission changes directly', () => {
     const { root, store } = fixture(); const entry = store.ensure('group', 'legacy');
@@ -45,15 +45,14 @@ describe('QQ account defaults and per-peer settings', () => {
     const converted = reloaded.updateSettings(entry.key, before.policy.version, edited, '', true);
     expect(converted.policy).toMatchObject({ nativeTools: true, toolMode: 'native', permission: 'workspace-write', tools: {} });
   });
-  it('saves settings and row count in one transaction and preserves Session prompt snapshots', () => {
+  it('saves settings and row count in one transaction and persists scope prompts', () => {
     const { store } = fixture(); const first = store.ensure('c2c', 'person');
     store.bindSession(first.key, 'original'); const before = store.get(first.key)!;
-    const settings = { ...before.settings!, prompt: 'next Session only', execution: { kind: 'custom' as const, permission: 'read-only' as const, tools: ['read'] } };
+    const settings = { ...before.settings!, promptDirect: 'next Session only', execution: { kind: 'custom' as const, permission: 'read-only' as const, tools: ['read'] } };
     expect(() => store.updateSettings(first.key, before.policy.version, settings, 'alias', true, { expectedVersion: before.recording!.version + 1, maxMessages: 10 })).toThrow('记录设置已更新');
     expect(store.get(first.key)).toEqual(before);
     const after = store.updateSettings(first.key, before.policy.version, settings, 'alias', true, { expectedVersion: before.recording!.version, maxMessages: 10 });
     expect(after).toMatchObject({ alias: 'alias', settings, policy: { nativeTools: false, tools: { read: 'allow' } }, recording: { maxMessages: 10, retentionDays: 0, enabled: true } });
-    expect(after.sessions[0]?.prompt).toBe('');
-    expect(store.bindSession(first.key, 'next').sessions[1]?.prompt).toBe('next Session only');
+    expect(after.settings?.promptDirect).toBe('next Session only');
   });
 });

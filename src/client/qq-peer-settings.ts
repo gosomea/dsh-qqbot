@@ -94,7 +94,7 @@ function PeerSettingsDraft({ entry, settings, store, tools, commands = [], selec
     !entry.admitted && entry.policy.receiveEnabled !== false ? h('div', { className: 'imqc-banner' }, h('p', { className: 'imqc-hint' }, '此对话当前未获接收许可。接收开关仍受账号访问范围约束；加入访问名单后才能接收。'),
       h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: admit }, '启用此对话并加入访问名单')) : null,
     h('label', { className: 'imqc-field' }, h('span', null, 'QQ 备注'), h(Input, { value: draft.alias, maxLength: 100, disabled: busy, 'aria-label': 'QQ 备注', onChange: (event: ChangeEvent<HTMLInputElement>) => patch({ alias: event.target.value }) })),
-    h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, commands, onPickDirectory: selectorSource.pickDirectory, disabled: busy, onChange: value => patch({ settings: value }), onRefreshCatalog: catalog.refresh,
+    h(QQAgentSettingsForm, { settings: draft.settings, tools, catalog, commands, chatScope: entry.scope, onPickDirectory: selectorSource.pickDirectory, disabled: busy, onChange: value => patch({ settings: value }), onRefreshCatalog: catalog.refresh,
       askTools: Object.entries(entry.policy.tools).filter(([, decision]) => decision === 'ask').map(([id]) => id) }),
     h('label', { className: 'imqc-field' }, h('span', null, t('peer.retain.label')), h(Input, { type: 'number', min: 0, max: 1_000_000, step: 1, value: draft.maxMessages, disabled: busy || !entry.recording, 'aria-label': t('peer.retain.label'), onChange: (event: ChangeEvent<HTMLInputElement>) => patch({ maxMessages: Number(event.target.value), countEdited: true }) })),
     h('p', { className: 'imqc-hint' }, t('peer.retain.hint')),

@@ -32,7 +32,7 @@ const selectors = {
   modelCatalog: async () => ({ ok: true, value: { groups: catalog.models.groups.map(group => ({ ...group, models: group.models.map(model => ({ id: model.model, name: model.name })) })), failures: [] } }),
   listAgentPresets: async () => ({ ok: true, value: { presets: catalog.presets } }),
 };
-function settings(change = {}) { return { preset: '', model: null, prompt: '', cwd: '', execution: { kind: 'native', permission: 'read-only' }, slashCommands: true, ...change }; }
+function settings(change = {}) { return { preset: '', model: null, promptGroup: '', promptDirect: '', cwd: '', execution: { kind: 'native', permission: 'read-only' }, slashCommands: true, ...change }; }
 function entry(change = {}) {
   return { key: `settings-${++sequence}`, appId: 'app', scope: 'group', peerId: 'peer', name: '测试群', alias: '', currentSessionId: 'current', sessions: [], members: [],
     policy: { ...defaultPolicy('custom', '/project'), nativeTools: true, receiveEnabled: true }, settings: settings(),
@@ -125,11 +125,11 @@ describe('peer settings persistence', () => {
     const { store, value, perform } = setup();
     perform.mockImplementation(async action => snapshot(store, { ...value, alias: action.alias, settings: action.settings, policy: { ...value.policy, version: 2 }, recording: { ...value.recording, version: 2, maxMessages: action.recording.maxMessages } }));
     await act(async () => root.render(peer(store, value)));
-    await edit('QQ 备注', '新备注'); await edit('工作目录', '/next'); await edit('补充提示词', '下次会话的指令'); await edit('保留消息记录条数', '200');
+    await edit('QQ 备注', '新备注'); await edit('工作目录', '/next'); await edit('群聊补充提示词', '下次会话的指令'); await edit('保留消息记录条数', '200');
     await click('保存会话设置');
     expect(perform).toHaveBeenCalledExactlyOnceWith({ action: 'settings', key: value.key, expectedVersion: 1, alias: '新备注', receiveEnabled: true,
-      settings: { ...value.settings, cwd: '/next', prompt: '下次会话的指令' }, recording: { expectedVersion: 1, maxMessages: 200 } });
-    expect(container.textContent).toContain('下次新会话生效');
+      settings: { ...value.settings, cwd: '/next', promptGroup: '下次会话的指令' }, recording: { expectedVersion: 1, maxMessages: 200 } });
+    expect(container.textContent).toContain('补充提示词立即生效');
     expect(store.getSnapshot().overlay).toBeNull();
     // 会话设置面板不再内嵌"新建会话"入口（改由左侧栏每个对话提供）
     expect(container.textContent).not.toContain('新建会话');
@@ -139,11 +139,11 @@ describe('peer settings persistence', () => {
     const { store, value, perform } = setup(entry({ running: true }));
     perform.mockResolvedValue(snapshot(store, { ...value, recording: { ...value.recording, version: 2, enabled: false, maxMessages: 0 } }));
     await act(async () => root.render(peer(store, value)));
-    await edit('补充提示词', 'later'); await edit('保留消息记录条数', '0');
+    await edit('群聊补充提示词', 'later'); await edit('保留消息记录条数', '0');
     expect(button('保存会话设置').disabled).toBe(true);
     await click('仅保存记录数量');
     expect(perform).toHaveBeenCalledExactlyOnceWith({ action: 'recording', key: value.key, expectedVersion: 1, enabled: false, maxMessages: 0, retentionDays: 0 });
-    expect(field('补充提示词').value).toBe('later');
+    expect(field('群聊补充提示词').value).toBe('later');
     expect(container.textContent).toContain('有未保存修改');
   });
   it('applies an execution-permission change directly without a legacy confirmation step', async () => {
@@ -160,13 +160,13 @@ describe('peer settings persistence', () => {
   });
   it('retains a dirty draft across remount and stops stale-version saves', async () => {
     const { store, value, perform } = setup();
-    await act(async () => root.render(peer(store, value))); await edit('补充提示词', 'local draft');
+    await act(async () => root.render(peer(store, value))); await edit('群聊补充提示词', 'local draft');
     await act(async () => root.unmount()); root = createRoot(container);
-    const newer = { ...value, policy: { ...value.policy, version: 2 }, settings: { ...value.settings, prompt: 'remote' } };
+    const newer = { ...value, policy: { ...value.policy, version: 2 }, settings: { ...value.settings, promptGroup: 'remote' } };
     await act(async () => root.render(peer(store, newer)));
-    expect(field('补充提示词').value).toBe('local draft'); expect(button('保存会话设置').disabled).toBe(true);
+    expect(field('群聊补充提示词').value).toBe('local draft'); expect(button('保存会话设置').disabled).toBe(true);
     expect(container.textContent).toContain('设置已在其他位置更新'); expect(perform).not.toHaveBeenCalled();
-    await click('放弃修改'); expect(field('补充提示词').value).toBe('remote');
+    await click('放弃修改'); expect(field('群聊补充提示词').value).toBe('remote');
   });
   it('keeps an unconfirmed failed save draft and isolates late success from another peer', async () => {
     const { store, value, perform } = setup();
@@ -187,11 +187,11 @@ describe('peer settings persistence', () => {
 describe('global new-peer defaults', () => {
   it('saves guarded defaults through the directory API without a profile write', async () => {
     const { store, value, perform } = setup(); const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
-    perform.mockResolvedValue(snapshot(store, value, { version: 2, settings: settings({ prompt: 'new peers only' }) }));
+    perform.mockResolvedValue(snapshot(store, value, { version: 2, settings: settings({ promptGroup: 'new peers only' }) }));
     await act(async () => root.render(h(QQDefaultsSettings, { store, selectorSource: selectors, t: testT })));
-    await edit('补充提示词', 'new peers only'); await click('保存默认设置（即时生效）');
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ action: 'defaults', expectedVersion: 1, settings: settings({ prompt: 'new peers only' }) });
-    expect(fetch).not.toHaveBeenCalled(); expect(store.conversation(value.key).settings.prompt).toBe('');
+    await edit('群聊补充提示词', 'new peers only'); await click('保存默认设置（即时生效）');
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ action: 'defaults', expectedVersion: 1, settings: settings({ promptGroup: 'new peers only' }) });
+    expect(fetch).not.toHaveBeenCalled(); expect(store.conversation(value.key).settings.promptGroup).toBe('');
     expect(container.textContent).toContain('已接入的对话保持各自设置');
   });
   it('preserves a conflicting defaults draft, then reloads only after discard', async () => {
