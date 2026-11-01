@@ -1,5 +1,5 @@
 import { createElement as h, useState, type ChangeEvent, type ReactNode } from 'react';
-import { Button, Checkbox, Input, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives';
+import { Button, Input, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { QQAgentSettings, QQExecutionSettings } from '../shared/agent-settings.ts';
 import type { ConversationSandboxMode, SlashCommandDescriptor, ToolCatalogEntry } from '../shared/conversation-protocol.ts';
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
@@ -53,7 +53,23 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
   const selected = new Set(execution.kind === 'custom' ? execution.tools : []);
   const search = query.trim().toLocaleLowerCase();
   const available: ToolCatalogEntry[] = [...tools, ...[...selected].filter(id => !tools.some(tool => tool.id === id)).map(id => ({ id, name: id, description: '当前目录不可用，已保留原选择。', category: 'other', constraint: 'none', available: false } satisfies ToolCatalogEntry))];
-  const visible = available.filter(tool => `${tool.name} ${tool.id} ${tool.description}`.toLocaleLowerCase().includes(search));
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [onlySelected, setOnlySelected] = useState(false);
+  const [collapsedCats, setCollapsedCats] = useState<ReadonlySet<string>>(() => new Set());
+  const base0 = available.filter(tool => `${tool.name} ${tool.id} ${tool.description}`.toLocaleLowerCase().includes(search));
+  const visible = base0.filter(tool => (categoryFilter === null || tool.category === categoryFilter) && (!onlySelected || selected.has(tool.id)));
+  const categoryCounts = new Map<string, { total: number; chosen: number }>();
+  for (const tool of base0) {
+    const entry = categoryCounts.get(tool.category) ?? { total: 0, chosen: 0 };
+    entry.total += 1; if (selected.has(tool.id)) entry.chosen += 1;
+    categoryCounts.set(tool.category, entry);
+  }
+  const toggleCategory = (category: string): void => {
+    const groupIds = available.filter(tool => tool.category === category && tool.available).map(tool => tool.id);
+    const allChosen = groupIds.length > 0 && groupIds.every(id => selected.has(id));
+    setTools(allChosen ? [...selected].filter(id => !groupIds.includes(id)) : [...selected, ...groupIds]);
+  };
+  const toggleCollapsed = (category: string): void => setCollapsedCats(prev => { const next = new Set(prev); if (next.has(category)) next.delete(category); else next.add(category); return next; });
   const setExecution = (next: QQExecutionSettings): void => onChange({ ...settings, execution: next });
   const setTools = (values: Iterable<string>): void => setExecution({ kind: 'custom', permission: execution.permission, tools: [...new Set(values)].sort() });
   const currentChoice = model ? findModel(catalog.models, model) : undefined;
@@ -91,12 +107,33 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
           onClick: () => setTools(preset.tools.filter(id => available.some(tool => tool.id === id && tool.available))) }, preset.label))),
       h('div', { className: 'imqc-field' }, h('span', null, '基础上限'), h(QQSelect, { label: '自定义工具的基础权限', value: execution.permission, options: PERMISSIONS, disabled, onChange: value => { const permission = PERMISSIONS.find(item => item.value === value)?.value; if (permission) setExecution({ ...execution, permission }); } })),
       h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => setToolsOpen(true) }, `选择工具（已选 ${selected.size} 项）`),
-      toolsOpen ? h(Modal, { open: true, title: '选择可用工具', closeLabel: '关闭工具选择', onClose: () => setToolsOpen(false), children: h('div', { className: 'imqc' },
-      h(Input, { type: 'search', value: query, disabled, placeholder: '搜索工具名称或标识', 'aria-label': '搜索工具', onChange: (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value) }),
-      h('div', { className: 'imqc-actions' }, h(Button, { variant: 'ghost', size: 'sm', disabled: disabled || !visible.some(tool => tool.available), onClick: () => setTools([...selected, ...visible.filter(tool => tool.available).map(tool => tool.id)]) }, '全选当前筛选'), h(Button, { variant: 'ghost', size: 'sm', disabled: disabled || selected.size === 0, onClick: () => setTools([]) }, '清空选择'), h('span', { className: 'imqc-hint' }, `已选 ${selected.size} 项`)),
-      h('div', { className: 'imqc-toolChoices' }, ...Object.entries(CATEGORIES).map(([category, label]) => ({ category, label, tools: visible.filter(tool => tool.category === category) })).filter(group => group.tools.length).map(group => h('section', { key: group.category, className: 'imqc-toolGroup' }, h('strong', null, group.label), ...group.tools.map(tool => h('div', { className: 'imqc-tool', key: tool.id }, h('div', { title: tool.description }, h('span', null, tool.name), tool.id !== tool.name ? h('small', { className: 'imqc-hint' }, tool.id) : null, !tool.available ? h('small', { className: 'imqc-hint' }, tool.reason ?? '当前不可用') : null, askTools.includes(tool.id) ? h('small', { className: 'imqc-hint' }, '需额外审批') : null), h(Checkbox, { className: 'imqc-toolCheckbox', label: `启用${tool.name}`, checked: selected.has(tool.id), disabled: disabled || (!tool.available && !selected.has(tool.id)), onChange: checked => setTools(checked ? [...selected, tool.id] : [...selected].filter(id => id !== tool.id)) })))))),
-      visible.length === 0 ? h('p', { className: 'imqc-hint' }, '没有匹配的工具。') : null,
-      h(Button, { variant: 'primary', size: 'sm', onClick: () => setToolsOpen(false) }, '完成选择')) }) : null),
+      toolsOpen ? h(Modal, { open: true, title: '选择可用工具', closeLabel: '关闭工具选择', onClose: () => setToolsOpen(false), children: h('div', { className: 'imqc imqc-toolPicker' },
+      h('div', { className: 'imqc-toolPickerBar' },
+        h(Input, { type: 'search', value: query, disabled, placeholder: '搜索工具名称或标识', 'aria-label': '搜索工具', onChange: (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value) }),
+        h('div', { className: 'imqc-inline' }, h('span', { className: 'imqc-hint' }, `已选 ${selected.size} 项`),
+          h(Button, { variant: 'ghost', size: 'sm', disabled: disabled || !visible.some(tool => tool.available), onClick: () => setTools([...selected, ...visible.filter(tool => tool.available).map(tool => tool.id)]) }, '全选当前筛选'),
+          h(Button, { variant: 'ghost', size: 'sm', disabled: disabled || selected.size === 0, onClick: () => setTools([]) }, '清空选择'))),
+      h('div', { className: 'imqc-chips' }, h('span', { className: 'imqc-hint' }, '分类：'),
+        ...Object.entries(CATEGORIES).filter(([category]) => (categoryCounts.get(category)?.total ?? 0) > 0).map(([category, label]) => {
+          const count = categoryCounts.get(category);
+          return h('button', { type: 'button', key: category, className: 'imqc-chip', 'data-active': categoryFilter === category || undefined, onClick: () => setCategoryFilter(categoryFilter === category ? null : category) }, `${label} ${count?.chosen ?? 0}/${count?.total ?? 0}`);
+        }),
+        h('label', { className: 'imqc-onlySelected' }, h('input', { type: 'checkbox', checked: onlySelected, disabled, onChange: (event: ChangeEvent<HTMLInputElement>) => setOnlySelected(event.target.checked) }), h('span', null, '仅看已选'))),
+      h('div', { className: 'imqc-toolChoices' }, ...Object.entries(CATEGORIES).map(([category, label]) => ({ category, label, tools: visible.filter(tool => tool.category === category) })).filter(group => group.tools.length).map(group => h('section', { key: group.category, className: 'imqc-toolGroup' }, h('div', { className: 'imqc-toolGroupHead' },
+          h('button', { type: 'button', className: 'imqc-toolGroupToggle', 'aria-expanded': !collapsedCats.has(group.category), onClick: () => toggleCollapsed(group.category) }, collapsedCats.has(group.category) ? '▸' : '▾', h('strong', null, group.label)),
+          h('button', { type: 'button', className: 'imqc-toolGroupAll', disabled, onClick: () => toggleCategory(group.category) }, '全选本类')),
+        !collapsedCats.has(group.category) ? h('div', { className: 'imqc-toolGrid' }, ...group.tools.map(tool => {
+          const isOn = selected.has(tool.id);
+          return h('label', { className: 'imqc-toolRow', key: tool.id, 'data-on': isOn || undefined, 'data-off': !tool.available && !isOn || undefined, title: tool.description || undefined },
+            h('input', { type: 'checkbox', className: 'imqc-toolRowInput', checked: isOn, disabled: disabled || (!tool.available && !isOn), onChange: (event: ChangeEvent<HTMLInputElement>) => setTools(event.target.checked ? [...selected, tool.id] : [...selected].filter(id => id !== tool.id)) }),
+            h('span', { className: 'imqc-toolRowBody' },
+              h('span', { className: 'imqc-toolRowName' }, tool.name, tool.id !== tool.name ? h('small', { className: 'imqc-hint' }, tool.id) : null),
+              tool.description ? h('span', { className: 'imqc-toolRowDesc' }, tool.description) : null,
+              (!tool.available ? h('small', { className: 'imqc-hint' }, tool.reason ?? '当前不可用') : null) ?? null,
+              askTools.includes(tool.id) ? h('small', { className: 'imqc-hint' }, '需额外审批') : null));
+        })) : null))),
+      visible.length === 0 ? h('p', { className: 'imqc-hint' }, onlySelected ? '还没有勾选任何工具。' : '没有匹配的工具。') : null,
+      h('div', { className: 'imqc-actions imqc-toolPickerFoot' }, h(Button, { variant: 'primary', size: 'sm', onClick: () => setToolsOpen(false) }, '完成选择'))) }) : null),
     h('div', { className: 'imqc-field' }, h('span', null, '工作目录'),
       h('div', { className: 'imqc-inline' }, h(Input, { value: settings.cwd, disabled, placeholder: '留空使用 QQ 默认工作目录', 'aria-label': '工作目录', onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, cwd: event.target.value }) }),
         onPickDirectory ? h(Button, { variant: 'outline', size: 'sm', disabled, onClick: () => { void onPickDirectory().then(path => { if (path) onChange({ ...settings, cwd: path }); }); } }, '选择目录…') : null)),

@@ -36,7 +36,28 @@ export function installConversationStyles(): void {
 .imqc-field { display: grid; gap: 5px; margin: 11px 0; }
 .imqc-field > span:first-child { color: var(--dsw-alias-label-secondary); }
 .imqc-check { display: flex; align-items: flex-start; gap: 7px; margin: 7px 0; overflow-wrap: anywhere; }
-.imqc-toolChoices { max-height: 260px; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; }
+.imqc-toolChoices { max-height: min(56vh, 540px); overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; }
+.imqc-toolPickerBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.imqc-toolPickerBar > :first-child { flex: 1; min-width: 200px; }
+.imqc-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 6px; }
+.imqc-chip { border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-secondary); font: 12px/1.4 var(--dsw-font-family); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.imqc-chip[data-active] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-secondary); }
+.imqc-onlySelected { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; font-size: 12px; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.imqc-toolGroupHead { display: flex; align-items: center; gap: 8px; }
+.imqc-toolGroupToggle { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 2px 0; text-align: left; }
+.imqc-toolGroupAll { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: 12px/1.4 var(--dsw-font-family); cursor: pointer; }
+.imqc-toolGroupAll:disabled { opacity: .5; cursor: default; }
+.imqc-toolGrid { display: grid; grid-template-columns: minmax(0,1fr); gap: 4px; margin: 6px 0 2px; }
+.imqc-toolRow { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: var(--dsw-radius-md); cursor: pointer; border: 1px solid transparent; }
+.imqc-toolRow:hover { background: var(--dsw-alias-bg-layer-1); }
+.imqc-toolRow[data-on] { border-color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
+.imqc-toolRow[data-off] { opacity: .5; cursor: default; }
+.imqc-toolRowInput { margin-top: 2px; width: 15px; height: 15px; flex: none; }
+.imqc-toolRowBody { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.imqc-toolRowName { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--dsw-alias-label-primary); }
+.imqc-toolRowDesc { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+.imqc-toolPickerFoot { margin-top: 12px; }
+@media (min-width: 560px) { .imqc-toolGrid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
 .imqc-toolGroup { padding: 13px 0; border-bottom: 1px solid var(--dsw-alias-border-l2); }
 .imqc-fieldset { margin: 12px 0; padding: 10px 14px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); }
 .imqc-fieldsetTitle { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 2px 0 6px; }
