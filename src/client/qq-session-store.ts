@@ -27,6 +27,8 @@ export interface QQSidebarState {
   readonly selectedSessionId: string | null;
   readonly expandedPeers: readonly string[];
   readonly collapsedScopes: readonly QQScope[];
+  /** 已展开完整历史会话列表的 peer（对应会话列表底部的"收起历史"）。 */
+  readonly showAllPeers: readonly string[];
   readonly search: string;
 }
 export interface QQSessionState {
@@ -43,7 +45,7 @@ export interface QQSessionState {
 /** One directory subscription serves the directory, row decorations and Session actions. */
 export class QQSessionStore {
   private state: QQSessionState = { directory: null, runtime: null, loading: true, error: null, overlay: null, deliveryRevision: 0, deliveries: {},
-    sidebar: { sidebarMode: 'workspace', selectedSessionId: null, expandedPeers: [], collapsedScopes: [], search: '' } };
+    sidebar: { sidebarMode: 'workspace', selectedSessionId: null, expandedPeers: [], collapsedScopes: [], showAllPeers: [], search: '' } };
   private readonly listeners = new Set<() => void>();
   private readonly sessions = new Map<string, ConversationView>();
   private request = 0;
@@ -62,6 +64,7 @@ export class QQSessionStore {
       return {
         ...(Array.isArray(value.expandedPeers) ? { expandedPeers: value.expandedPeers.filter(x => typeof x === 'string') } : {}),
         ...(Array.isArray(value.collapsedScopes) ? { collapsedScopes: value.collapsedScopes.filter(x => x === 'group' || x === 'c2c') } : {}),
+        ...(Array.isArray(value.showAllPeers) ? { showAllPeers: value.showAllPeers.filter(x => typeof x === 'string') } : {}),
         ...(typeof value.selectedSessionId === 'string' || value.selectedSessionId === null ? { selectedSessionId: value.selectedSessionId } : {}),
       };
     } catch { return {}; }
@@ -69,7 +72,7 @@ export class QQSessionStore {
   private saveSidebar(): void {
     try {
       const s = this.state.sidebar;
-      globalThis.localStorage?.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify({ expandedPeers: s.expandedPeers, collapsedScopes: s.collapsedScopes, selectedSessionId: s.selectedSessionId }));
+      globalThis.localStorage?.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify({ expandedPeers: s.expandedPeers, collapsedScopes: s.collapsedScopes, showAllPeers: s.showAllPeers, selectedSessionId: s.selectedSessionId }));
     } catch { /* storage 不可用则忽略 */ }
   }
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
@@ -119,6 +122,8 @@ export class QQSessionStore {
   }
   togglePeer(key: string): void { this.updateSidebar({ expandedPeers: toggleValue(this.state.sidebar.expandedPeers, key) }); }
   toggleScope(scope: QQScope): void { this.updateSidebar({ collapsedScopes: toggleValue(this.state.sidebar.collapsedScopes, scope) }); }
+  /** 切换某 peer 的完整历史会话列表展开/收起（列表底部按钮）。 */
+  showAllSessions(key: string): void { this.updateSidebar({ showAllPeers: toggleValue(this.state.sidebar.showAllPeers, key) }); }
   setSearch(search: string): void { this.updateSidebar({ search }); }
   installNavigation(navigate: (sessionId: string) => void): () => void {
     this.navigate = navigate;

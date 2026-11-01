@@ -22,7 +22,7 @@ describe('QQ sidebar peer and native Session projection', () => {
     if (!group) throw new Error('missing peer');
     expect(group.currentSession?.sessionId).toBe('current');
     expect(group.historySessions.map((session) => session.sessionId)).toEqual(['old-0', 'old-5', 'old-4', 'old-3', 'old-2', 'old-1']);
-    expect(visibleQQSessions(group)).toHaveLength(6); // 对齐原生：全部历史会话
+    expect(visibleQQSessions(group, true)).toHaveLength(6); // showAll=全部
     expect(group.historySessions[0]?.title).toBe('最近工作');
   });
   it('searches platform names, remarks, and native Session titles without renaming the peer', () => {
@@ -118,9 +118,9 @@ describe('independent QQ sidebar state', () => {
     const entry = peer(); store.accept({ conversations: [entry], tools: [], ownerIds: [] });
     const projected = qqSidebarPeers([entry], {}, [], '')[0];
     if (!projected) throw new Error('missing peer');
-    expect(visibleQQSessions(projected)).toHaveLength(6);
+    expect(visibleQQSessions(projected, true)).toHaveLength(6);
     store.openSession('old-0');
-    const visible = visibleQQSessions(projected);
+    const visible = visibleQQSessions(projected, true);
     expect(visible.some((session) => session.sessionId === store.getSnapshot().sidebar.selectedSessionId)).toBe(true);
     expect(visible).toHaveLength(6);
   });
