@@ -125,10 +125,10 @@ describe('peer settings persistence', () => {
     const { store, value, perform } = setup();
     perform.mockImplementation(async action => snapshot(store, { ...value, alias: action.alias, settings: action.settings, policy: { ...value.policy, version: 2 }, recording: { ...value.recording, version: 2, maxMessages: action.recording.maxMessages } }));
     await act(async () => root.render(peer(store, value)));
-    await edit('QQ 备注', '新备注'); await edit('工作目录', '/next'); await edit('群聊补充提示词', '下次会话的指令'); await edit('保留消息记录条数', '200');
+    await edit('QQ 备注', '新备注'); await edit('群聊补充提示词', '下次会话的指令'); await edit('保留消息记录条数', '200');
     await click('保存会话设置');
     expect(perform).toHaveBeenCalledExactlyOnceWith({ action: 'settings', key: value.key, expectedVersion: 1, alias: '新备注', receiveEnabled: true,
-      settings: { ...value.settings, cwd: '/next', promptGroup: '下次会话的指令' }, recording: { expectedVersion: 1, maxMessages: 200 } });
+      settings: { ...value.settings, promptGroup: '下次会话的指令' }, recording: { expectedVersion: 1, maxMessages: 200 } });
     expect(container.textContent).toContain('补充提示词立即生效');
     expect(store.getSnapshot().overlay).toBeNull();
     // 会话设置面板不再内嵌"新建会话"入口（改由左侧栏每个对话提供）
@@ -197,9 +197,9 @@ describe('global new-peer defaults', () => {
   it('preserves a conflicting defaults draft, then reloads only after discard', async () => {
     const { store, value, perform } = setup();
     await act(async () => root.render(h(QQDefaultsSettings, { store, selectorSource: selectors, t: testT })));
-    await edit('工作目录', '/local');
-    await act(async () => store.accept(snapshot(store, value, { version: 2, settings: settings({ cwd: '/remote' }) }).snapshot));
-    expect(field('工作目录').value).toBe('/local'); expect(button('保存默认设置（即时生效）').disabled).toBe(true);
-    expect(perform).not.toHaveBeenCalled(); await click('放弃默认设置修改'); expect(field('工作目录').value).toBe('/remote');
+    await edit('群聊补充提示词', '/local');
+    await act(async () => store.accept(snapshot(store, value, { version: 2, settings: settings({ promptGroup: '/remote' }) }).snapshot));
+    expect(field('群聊补充提示词').value).toBe('/local'); expect(button('保存默认设置（即时生效）').disabled).toBe(true);
+    expect(perform).not.toHaveBeenCalled(); await click('放弃默认设置修改'); expect(field('群聊补充提示词').value).toBe('/remote');
   });
 });

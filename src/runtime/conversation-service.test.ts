@@ -469,9 +469,32 @@ describe('pairing-code claim (two-phase)', () => {
     const f = fixture();
     const { code } = f.service.issuePairCode('owner');
     const started = f.service.startClaim(code, { openid: 'btn-oid', nickname: '按钮人', scope: 'c2c', sceneName: '私聊' });
-    const handled = f.service.handleClaimInteraction({ data: { resolved: { button_data: JSON.stringify({ t: 'claim', d: 'confirm', n: started.nonce }) } } } as never);
-    expect(handled).toBe(true);
+    // 点击者必须与发起者一致（user_openid === actor.openid）
+    const res = f.service.handleClaimInteraction({ user_openid: 'btn-oid', data: { resolved: { button_data: JSON.stringify({ t: 'claim', d: 'confirm', n: started.nonce }) } } } as never);
+    expect(res.handled).toBe(true);
+    expect(res.reply).toBeTruthy();
     expect(f.service.store.ownerIds()).toContain('btn-oid');
+  });
+
+  it('rejects a confirm click from a different user', () => {
+    const f = fixture();
+    const { code } = f.service.issuePairCode('owner');
+    const started = f.service.startClaim(code, { openid: 'owner-oid', nickname: '本人', scope: 'c2c', sceneName: '私聊' });
+    const res = f.service.handleClaimInteraction({ user_openid: 'intruder-oid', data: { resolved: { button_data: JSON.stringify({ t: 'claim', d: 'confirm', n: started.nonce }) } } } as never);
+    expect(res.handled).toBe(true); // 事件被消费
+    expect(res.reply).toContain('只有发起认领的人'); // 给出拒绝提示
+    expect(f.service.store.ownerIds()).not.toContain('owner-oid'); // 但未写入
+  });
+
+  it('group allowlist claim targets the group, not the sender (message shows group name, no openID)', () => {
+    const f = fixture();
+    const { code } = f.service.issuePairCode('allow-group');
+    // 群会话：peerId='g'（群 openid），senderId='actor'（成员 openid）
+    const started = f.service.beginClaimFromMessage('group', 'g', code, 'actor', '小明');
+    expect(started.ok).toBe(true);
+    expect(started.message).toContain('群');
+    expect(started.message).not.toMatch(/[0-9A-Fa-f]{16,}/); // 不显示 openID
+    expect(started.message).not.toContain('小明'); // 不是对"人"加白
   });
 
   it('adds multiple openIDs with openid:nickname syntax and renames a member', () => {

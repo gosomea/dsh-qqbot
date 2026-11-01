@@ -90,6 +90,13 @@ export class PairingService {
     return entry !== undefined && this.now() <= entry.expiresAt;
   }
 
+  /** 查看某码的用途（不核销）；不存在/过期返回 undefined。 */
+  peekPurpose(rawCode: string): PairPurpose | undefined {
+    const code = normalizePairCode(rawCode);
+    const entry = this.pending.get(code);
+    return entry !== undefined && this.now() <= entry.expiresAt ? entry.purpose : undefined;
+  }
+
   /** 记录一个待确认认领，返回 nonce（按钮回调携带）。 */
   beginConfirm(purpose: PairPurpose, actor: PendingActor): string {
     const nonce = generatePairCode(this.random) + generatePairCode(this.random);
@@ -97,6 +104,14 @@ export class PairingService {
     // 清理过期
     for (const [k, v] of this.pendingConfirms) if (this.now() > v.expiresAt) this.pendingConfirms.delete(k);
     return nonce;
+  }
+
+  /** 查看待确认（不删除；过期/未知返回 undefined）。 */
+  peekConfirm(nonce: string): { purpose: PairPurpose; actor: PendingActor } | undefined {
+    const entry = this.pendingConfirms.get(nonce);
+    if (entry === undefined) return undefined;
+    if (this.now() > entry.expiresAt) return undefined;
+    return { purpose: entry.purpose, actor: entry.actor };
   }
 
   /** 取出并删除待确认（点按钮时核销；过期/未知返回 undefined）。 */

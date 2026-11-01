@@ -8,7 +8,7 @@ import { createElement as h, useCallback, useEffect, useRef, useState, type Reac
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives';
 import { fetchJson } from './http.ts';
 import {
-  PAIR_ISSUE_PATH, PAIR_MANUAL_PATH, PAIR_RENAME_PATH, PAIR_REVOKE_PATH, PAIR_STATUS_PATH, openidTail,
+  PAIR_ISSUE_PATH, PAIR_MANUAL_PATH, PAIR_RENAME_PATH, PAIR_REVOKE_PATH, PAIR_STATUS_PATH,
   type ClaimedMember, type PairPurpose, type PairStatusWire,
 } from '../shared/pairing-protocol.ts';
 
@@ -56,7 +56,13 @@ export function PairClaimPanel({ purpose, title, hint, enabled = true }: {
     if (code === null || status === null) { codeSeen.current = false; return; }
     const present = status.challenges.some((c) => c.code === code.code);
     if (present) { codeSeen.current = true; return; }
-    if (codeSeen.current) { codeSeen.current = false; setCode(null); setMsg('该配对码已被认领 ✔'); }
+    if (codeSeen.current) {
+      codeSeen.current = false;
+      const expired = Date.now() > code.expiresAt;
+      setCode(null);
+      if (expired) { setMsg('配对码已过期，请重新生成'); }
+      else { setMsg('该配对码已被认领 ✔'); setAddOpen(false); }
+    }
   }, [status, code]);
 
   // 所有 hooks 之后再按绑定态短路，避免 hook 数量不一致（React #310）。
@@ -111,7 +117,7 @@ export function PairClaimPanel({ purpose, title, hint, enabled = true }: {
             h('div', { className: 'imqc-pairMemberMain' },
               h('span', { className: 'imqc-pairMemberName' }, m.nickname || '（未命名）'),
               h('span', { className: 'imqc-pairMemberMeta' },
-                `${openidTail(m.openid)}${m.sceneName ? ` · ${m.scene === 'group' ? '群' : '私聊'}「${m.sceneName}」` : ` · ${m.scene === 'group' ? '群' : '私聊'}`}`)),
+                m.scene === 'group' ? '群' : `私聊${m.sceneName ? `「${m.sceneName}」` : ''}`)),
             isEditing
               ? h('div', { className: 'imqc-inline imqc-pairMemberEdit' },
                   h(Input, { value: editing.nickname, disabled: busy, placeholder: '昵称', 'aria-label': '修改昵称', onChange: (e: { currentTarget: { value: string } }) => setEditing({ openid: m.openid, nickname: e.currentTarget.value }) }),

@@ -17,7 +17,7 @@ import { ApprovalChannel, type ApprovalChannelContext } from '../features/approv
 import { decodeButtonData } from '../features/button-utils.ts';
 import { buildUserAgent } from '../shared/index.ts';
 import type { ImQQBotConfig } from '../config.ts';
-import type { ChatScope, Logger } from '../types.ts';
+import type { ChatScope, Logger, ReplyTarget } from '../types.ts';
 import { setupMiddlewares } from './middleware-setup.ts';
 import { startMediaCleanup } from '../media/media-cleaner.ts';
 import { ensureVisionInputModal, registerDescribeImageTool } from '../media/vision-tool.ts';
@@ -33,15 +33,15 @@ import { registerGroupHistoryTool } from '../runtime/history-tool.ts';
  * channel（question / approval）。QQ 只有一个 interaction 入口，集中路由
  * 避免多通道各自 try 导致误判。
  */
-function dispatchInteraction(event: InteractionEvent, manager: SessionManager): boolean {
+function dispatchInteraction(event: InteractionEvent, manager: SessionManager): { handled: boolean; reply?: string } {
   const raw = event.data?.resolved?.button_data;
-  if (!raw) return false;
+  if (!raw) return { handled: false };
   const button = decodeButtonData(raw);
-  if (!button) return false;
-  if (button.t === 'question') return manager.questionChannel?.handleInteraction(event) ?? false;
-  if (button.t === 'approval') return manager.approvalChannel?.handleInteraction(event) ?? false;
-  if (button.t === 'claim') return manager.conversations?.handleClaimInteraction(event as never) ?? false;
-  return false;
+  if (!button) return { handled: false };
+  if (button.t === 'question') return { handled: manager.questionChannel?.handleInteraction(event) ?? false };
+  if (button.t === 'approval') return { handled: manager.approvalChannel?.handleInteraction(event) ?? false };
+  if (button.t === 'claim') return manager.conversations?.handleClaimInteraction(event as never) ?? { handled: false };
+  return { handled: false };
 }
 
 export async function bootstrapGateway(
@@ -136,8 +136,13 @@ export async function bootstrapGateway(
       const entry = conversations.entry(scope, targetId);
       await conversations.ingestion.run(entry.key, async () => conversations.recordInbound(entry.key, { id: `interaction:${event.id}`, senderId: actor, senderName: '', text: '[QQ 交互按钮]', at: Date.now(), mentioned: true, attachments: [], contextEligible: false, provenance: 'interaction' }));
     }
-    const matched = dispatchInteraction(event, manager);
-    await bot.acknowledgeInteraction(event.id, matched ? 0 : 3).catch(() => {});
+    const result = dispatchInteraction(event, manager);
+    await bot.acknowledgeInteraction(event.id, result.handled ? 0 : 3).catch(() => {});
+    // 认领确认/取消后，主动给该会话回一条结果消息（被动回复）。
+    if (result.reply !== undefined && result.reply !== '' && targetId) {
+      const replyTarget = { scope, targetId, msgId: event.id } as unknown as ReplyTarget;
+      await bot.sendText(replyTarget, result.reply).catch((err: unknown) => logger.warn(`claim reply send failed: ${err instanceof Error ? err.message : String(err)}`));
+    }
   });
 
   bot.on('error', (err: unknown) => {

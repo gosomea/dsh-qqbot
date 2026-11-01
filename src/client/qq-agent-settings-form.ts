@@ -195,20 +195,32 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
         })) : null))),
       visible.length === 0 ? h('p', { className: 'imqc-hint' }, onlySelected ? '还没有勾选任何工具。' : '没有匹配的工具。') : null,
       h('div', { className: 'imqc-actions imqc-toolPickerFoot' }, h(Button, { variant: 'primary', size: 'sm', onClick: () => setToolsOpen(false) }, '完成选择'))) }) : null),
-    h('div', { className: 'imqc-field' }, h('span', null, '工作目录'),
-      h('div', { className: 'imqc-inline' }, h(Input, { value: settings.cwd, disabled, placeholder: defaultCwd ? `留空使用 QQ 默认工作目录：${defaultCwd}` : '留空使用 QQ 默认工作目录', 'aria-label': '工作目录', onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, cwd: event.target.value }) }),
-        (onPickDirectory || onCreateWorkspace) ? h(Button, { variant: 'outline', size: 'sm', disabled: disabled || cwdBusy, onClick: () => {
-          if (!onPickDirectory) return;
-          setCwdBusy(true);
-          void onPickDirectory().then(async path => {
-            if (!path) return;
-            // 选文件夹：能创建/采用工作区就采用（对齐原生），否则直接作为目录。
-            if (onCreateWorkspace) { try { const ws = await onCreateWorkspace(path); onChange({ ...settings, cwd: ws.path }); return; } catch { /* 无法建区则退回纯路径 */ } }
-            onChange({ ...settings, cwd: path });
-          }).finally(() => setCwdBusy(false));
-        } }, cwdBusy ? '处理中…' : '选择文件夹…') : null)),
-      workspaces.length > 0 ? h(QQSelect, { label: '工作目录（从已有工作区选择）', value: workspaces.find(ws => ws.path === settings.cwd)?.workspaceId ?? '', disabled, placeholder: '从已有工作区选择（不改则手动填写）', options: workspaces.map(ws => ({ value: ws.workspaceId, label: `${qqWorkspaceTitle(ws.title, ws.path, defaultWorkspaceName)}`, description: ws.path })), onChange: id => { const ws = workspaces.find(x => x.workspaceId === id); if (ws) onChange({ ...settings, cwd: ws.path }); } }) : null,
-      defaultCwd ? h('p', { className: 'imqc-hint' }, `默认工作目录：${defaultCwd}`) : null,
+    ((): ReactNode => {
+      // 工作目录 = 工作区选择器（对齐原生）：每项显示名称+路径，当前项打勾；首位是"留空用默认"。
+      const ADD_CWD = '::add-workspace';
+      const matched = workspaces.find(ws => ws.path === settings.cwd);
+      const options: QQSelectOption[] = [
+        { value: '', label: '留空使用 QQ 默认工作目录', description: defaultCwd },
+        ...workspaces.map(ws => ({ value: ws.workspaceId, label: qqWorkspaceTitle(ws.title, ws.path, defaultWorkspaceName), description: ws.path })),
+        ...(onPickDirectory || onCreateWorkspace) ? [{ value: ADD_CWD, label: '＋ 添加工作区（选择文件夹…）', disabled: disabled || cwdBusy }] : [],
+      ];
+      const pickFolder = (): void => {
+        if (!onPickDirectory) return;
+        setCwdBusy(true);
+        void onPickDirectory().then(async path => {
+          if (!path) return;
+          if (onCreateWorkspace) { try { const ws = await onCreateWorkspace(path); onChange({ ...settings, cwd: ws.path }); return; } catch { /* 无法建区则退回纯路径 */ } }
+          onChange({ ...settings, cwd: path });
+        }).finally(() => setCwdBusy(false));
+      };
+      return h('div', { className: 'imqc-field' }, h('span', null, '工作目录'),
+        h(QQSelect, { label: '工作目录', value: matched ? matched.workspaceId : (settings.cwd ? settings.cwd : ''), disabled, placeholder: '选择工作区', options, onChange: id => {
+          if (id === ADD_CWD) { pickFolder(); return; }
+          if (id === '') { onChange({ ...settings, cwd: '' }); return; }
+          const ws = workspaces.find(x => x.workspaceId === id); if (ws) onChange({ ...settings, cwd: ws.path });
+        } }),
+        defaultCwd ? h('p', { className: 'imqc-hint' }, `留空时使用默认工作目录：${defaultCwd}`) : null);
+    })(),
     ((): ReactNode => {
       // 补充提示词按 scope 分离：会话设置只显示当前 scope；新对话默认值两个都显示。
       const field = (key: 'promptGroup' | 'promptDirect', label: string): ReactNode => h('label', { className: 'imqc-field', key }, h('span', null, label), h('textarea', { rows: 4, value: settings[key], disabled, maxLength: 20_000, 'aria-label': label, onChange: (event: ChangeEvent<HTMLTextAreaElement>) => onChange({ ...settings, [key]: event.target.value }) }));

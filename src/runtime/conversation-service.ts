@@ -233,8 +233,9 @@ export class ConversationService {
       : { ...access, c2cMode: 'allowlist' as const, c2cAllow: [...new Set([...access.c2cAllow, openid])] };
     const persisted = updateProfileConfig({ access: nextAccess }, getProfileDir() ?? undefined, this.logger);
     if (persisted) this.config.access = nextAccess;
-    if (!persisted) return { ok: false, message: `⚠️ 已匹配「${nickname || openidTail(openid)}」，但写入 profile 失败（源码直载？）。请手动加入白名单。` };
-    return { ok: true, message: `✅ 已把「${nickname || openidTail(openid)}」加入${purpose === 'allow-group' ? '群' : '私聊'}白名单。` };
+    const label = purpose === 'allow-group' ? `群「${nickname || '本群'}」` : `「${nickname || '该用户'}」`;
+    if (!persisted) return { ok: false, message: `⚠️ 已匹配 ${label}，但写入 profile 失败（源码直载？）。请手动加入白名单。` };
+    return { ok: true, message: `✅ 已把 ${label} 加入${purpose === 'allow-group' ? '群' : '私聊'}白名单。` };
   }
 
   /**
@@ -247,9 +248,14 @@ export class ConversationService {
   /** 由 QQ 侧发起认领（/claim 命令或裸 token 共用）：解析 actor + startClaim。 */
   beginClaimFromMessage(scope: ChatScope, peerId: string, code: string, senderId: string, senderName?: string): { ok: boolean; message: string; nonce?: string } {
     const entry = this.entry(scope, peerId);
+    const purpose = this.pairing.peekPurpose(code);
+    // 群白名单是对「群」加白：身份用群 openID（peerId），昵称用群名；其余用发送者 openID。
+    const isGroupAllow = purpose === 'allow-group';
     const actor: PendingActor = {
-      openid: senderId,
-      nickname: senderName ?? (scope === 'group' ? (entry.name || entry.alias) : (entry.alias || entry.name)) ?? '',
+      openid: isGroupAllow ? peerId : senderId,
+      nickname: isGroupAllow
+        ? (entry.name || entry.alias || '本群')
+        : (senderName ?? (scope === 'c2c' ? (entry.alias || entry.name) : '') ?? ''),
       scope: scope === 'group' ? 'group' : 'c2c',
       sceneName: scope === 'group' ? (entry.name || entry.alias || '本群') : (entry.alias || entry.name || '私聊'),
     };
@@ -264,7 +270,10 @@ export class ConversationService {
     }
     const nonce = this.pairing.beginConfirm(result.purpose, actor);
     const label = result.purpose === 'owner' ? '斜杠命令超管' : result.purpose === 'allow-group' ? '群白名单' : '私聊白名单';
-    const who = `${actor.nickname || '(昵称未知)'} · ${openidTail(actor.openid)}（${actor.scope === 'group' ? `群「${actor.sceneName}」` : '私聊'}）`;
+    // 群白名单是对「群」加白——只显示群名，不显示 openID；其余显示昵称（同样不显示 openID）。
+    const who = result.purpose === 'allow-group'
+      ? `群「${actor.sceneName || actor.nickname || '本群'}」`
+      : `「${actor.nickname || '该用户'}」`;
     return { ok: true, nonce, purpose: result.purpose, message: `要把 ${who} 加入【${label}】吗？请点下方按钮确认。` };
   }
 
@@ -282,15 +291,23 @@ export class ConversationService {
    * QQ 按钮回调：处理认领确认/取消。
    * 由 gateway dispatchInteraction 在 t==='claim' 时调用。返回是否已处理。
    */
-  handleClaimInteraction(event: { id?: string; data?: { resolved?: { button_data?: string } }; openid?: string; user_openid?: string; group_member_openid?: string }): boolean {
+  handleClaimInteraction(event: { id?: string; data?: { resolved?: { button_data?: string } }; user_openid?: string; group_openid?: string; group_member_openid?: string }): { handled: boolean; reply?: string } {
     const raw = event.data?.resolved?.button_data;
-    if (raw === undefined) return false;
+    if (raw === undefined) return { handled: false };
     let parsed: { t?: string; d?: string; n?: string };
-    try { parsed = JSON.parse(raw) as { t?: string; d?: string; n?: string }; } catch { return false; }
-    if (parsed.t !== 'claim' || typeof parsed.n !== 'string') return false;
-    if (parsed.d === 'confirm') { const r = this.applyClaim(parsed.n); this.logger.info(`QQ 认领确认: ${r.message}`); }
-    else { this.cancelClaim(parsed.n); this.logger.info('QQ 认领已取消'); }
-    return true;
+    try { parsed = JSON.parse(raw) as { t?: string; d?: string; n?: string }; } catch { return { handled: false }; }
+    if (parsed.t !== 'claim' || typeof parsed.n !== 'string') return { handled: false };
+    const pending = this.pairing.peekConfirm(parsed.n);
+    if (pending === undefined) { this.logger.warn('QQ 认领按钮：待确认已过期或不存在'); return { handled: true, reply: '⚠️ 认领已过期或已完成，请重新发送配对码。' }; }
+    // 身份校验：确认/取消必须由「发起认领者本人」点击（群白名单由该群成员点击）。
+    const clickerUser = event.user_openid ?? event.group_member_openid;
+    if (pending.purpose === 'allow-group') {
+      if (event.group_openid !== pending.actor.openid) { this.logger.warn('QQ 认领确认被拒绝：非目标群或非群成员'); return { handled: true, reply: '⚠️ 只能在目标群里确认。' }; }
+    } else if (clickerUser !== pending.actor.openid) {
+      this.logger.warn('QQ 认领确认被拒绝：点击者与发起者不一致'); return { handled: true, reply: '⚠️ 只有发起认领的人才能确认。' };
+    }
+    if (parsed.d === 'confirm') { const r = this.applyClaim(parsed.n); this.logger.info(`QQ 认领确认: ${r.message}`); return { handled: true, reply: r.message }; }
+    this.cancelClaim(parsed.n); this.logger.info('QQ 认领已取消'); return { handled: true, reply: '已取消认领。' };
   }
 
   /**
