@@ -31,8 +31,9 @@ export function ConversationPanel({ onOpenSettings, store }: ConversationPanelPr
   const resumable = store.resumeTarget();
   return h('section', { className: 'imqc imqq-welcome', 'aria-label': 'QQ 会话' },
     h('svg', { viewBox: '0 0 24 24', 'aria-hidden': true }, h('path', { d: QQ_BOT_LOGO_PATH, fill: 'currentColor' })),
-    h('h3', null, 'QQ 会话'),
-    h('p', { className: 'imqc-state', role: 'status' }, directory.runtime ? PHASE_LABELS[directory.runtime.phase] : '读取连接状态…'),
+    h('div', { className: 'imqq-welcomeTitle' },
+      h('h3', null, 'QQ 会话'),
+      h('span', { className: 'imqc-state imqq-welcomeState', role: 'status' }, directory.runtime ? PHASE_LABELS[directory.runtime.phase] : '读取连接状态…')),
     h('p', { className: 'imqc-hint' }, entries.length ? '在左侧选择群聊或联系人，继续当前会话或查看历史。' : '收到 QQ 消息后，群聊和联系人会出现在左侧。可先管理账号和授权范围。'),
     h('p', { className: 'imqc-hint' }, '会话使用原生聊天页的输入框、模型和权限控件。选择目录中的对话不会自动创建任务。'),
     bind.state?.phase !== 'bound' ? h(BindPanelBody, bind) : null,

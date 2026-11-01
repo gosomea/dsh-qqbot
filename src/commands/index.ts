@@ -56,10 +56,34 @@ export function buildCommandList(deps: CommandDeps): CategorizedCommand[] {
         return `权限模式已切换：${value}`;
       },
     });
+    // 配对码认领：不受"斜杠命令开关/是否超管"限制（否则新用户永远无法认领）。
+    commands.push({ name: 'claim', category: 'qqbot', scope: 'all', description: '用网页生成的配对码认领超管/加入白名单（/claim 码）',
+      handler: async (ctx) => {
+        const { scope, peerId } = getScopePeer(ctx);
+        const service = deps.manager.conversations!;
+        const code = (ctx.command?.raw ?? '').trim();
+        if (!code) return '用法：在网页「账号与访问」生成配对码后，发送 /claim 码（如 /claim 7208QK）。';
+        const entry = service.entry(scope, peerId);
+        const actor = {
+          openid: ctx.message.senderId,
+          nickname: (ctx.message as { senderName?: string }).senderName ?? (scope === 'group' ? entry.name : entry.alias),
+          scope,
+          sceneName: scope === 'group' ? (entry.name || entry.alias || '本群') : (entry.alias || entry.name || '私聊'),
+        };
+        try {
+          const result = service.claimFromQQ(code, actor);
+          return result.message;
+        } catch (error) {
+          return `认领失败：${error instanceof Error ? error.message : '请稍后重试'}`;
+        }
+      },
+    });
     for (const command of commands) {
       const original = command.handler;
       const name = Array.isArray(command.name) ? command.name[0] : command.name;
       delete command.authorized;
+      // claim 允许在斜杠命令关闭/任何人使用下工作，其余命令按原规则鉴权。
+      if (name === 'claim') continue;
       command.handler = async (ctx) => {
         const { scope, peerId } = getScopePeer(ctx);
         const service = deps.manager.conversations!;

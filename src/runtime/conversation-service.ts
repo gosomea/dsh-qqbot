@@ -35,6 +35,8 @@ import { redactRecordingText } from './recording-redaction.ts';
 import { deliveryFailure, DeliveryNotSubmittedError } from './delivery-error.ts';
 import { defaultQQAgentSettings, validateQQAgentSettings, type QQAgentSettings } from '../shared/agent-settings.ts';
 import { permissionSandbox } from '../shared/policy-settings.ts';
+import { PairingService } from './pairing-service.ts';
+import { openidTail, type ClaimedMember, type PairPurpose, type PairStatusWire } from '../shared/pairing-protocol.ts';
 
 /** Owns channel intent independently from the lifetime of an activated Agent. */
 export class ConversationService {
@@ -67,6 +69,8 @@ export class ConversationService {
   private readonly policyDisposers = new Map<string, () => void>();
   private readonly promptHandles = new Map<string, QQPromptHandle>();
   private readonly catalogs = new Map<string, ToolCatalogEntry>();
+  /** 配对码运行期状态（Web 生成 / QQ 核销）。 */
+  readonly pairing = new PairingService();
   private readonly deliveryQueue = new ConversationQueue();
   private sender?: QQBotSender;
   private readonly commandAuthority = new AsyncLocalStorage<{scope: ChatScope; peerId: string; actor: string; webOwner: boolean; stopping: boolean}>();
@@ -184,6 +188,66 @@ export class ConversationService {
     return { accepted: true, cursor, releaseTrigger: trigger ? this.reserveTrigger(key) : undefined };
   }
   entry(scope: ChatScope, peerId: string): ConversationEntry { return this.ensure(scope, peerId); }
+
+  // ── 配对码认领（Web 生成码 / QQ 核销） ──────────────────────────────
+  /** Web：为某用途生成一次性配对码。 */
+  issuePairCode(purpose: PairPurpose): { code: string; purpose: PairPurpose; expiresAt: number } {
+    const challenge = this.pairing.issue(purpose);
+    return { code: challenge.code, purpose: challenge.purpose, expiresAt: challenge.expiresAt };
+  }
+
+  /** 读取已认领成员：超管来自 store.owners + memberProfiles；白名单来自 store 的 access。 */
+  pairStatus(): PairStatusWire {
+    const profiles = this.store.memberProfiles();
+    const owners: ClaimedMember[] = this.store.ownerIds().map((openid) => this.toMember(openid, profiles[openid], 'c2c'));
+    const access = this.config.access;
+    const allowC2c: ClaimedMember[] = [...access.c2cAllow].map((openid) => this.toMember(openid, profiles[openid], 'c2c'));
+    const allowGroup: ClaimedMember[] = [...access.groupAllow].map((openid) => this.toMember(openid, profiles[openid], 'group'));
+    return { challenges: this.pairing.listChallenges(), owners, allowC2c, allowGroup };
+  }
+
+  private toMember(openid: string, profile: { nickname: string; scene: 'group' | 'c2c'; sceneName: string; claimedAt: number } | undefined, scene: 'group' | 'c2c'): ClaimedMember {
+    return { openid, nickname: profile?.nickname ?? '', scene: profile?.scene ?? scene, sceneName: profile?.sceneName ?? '', claimedAt: profile?.claimedAt ?? 0 };
+  }
+
+  /** QQ：核销配对码，把发送者 openid 记入对应名单。返回用户可读结果。 */
+  claimFromQQ(rawCode: string, actor: { openid: string; nickname: string; scope: ChatScope; sceneName: string }): { ok: boolean; message: string } {
+    const result = this.pairing.consume(rawCode);
+    if (!result.ok) {
+      if (result.reason === 'expired') return { ok: false, message: '❌ 配对码已过期，请在网页重新生成。' };
+      return { ok: false, message: '❌ 配对码无效或已被使用，请核对后在网页重新生成。' };
+    }
+    const member: ClaimedMember = {
+      openid: actor.openid, nickname: actor.nickname, scene: actor.scope === 'group' ? 'group' : 'c2c',
+      sceneName: actor.sceneName, claimedAt: Date.now(),
+    };
+    if (result.purpose === 'owner') {
+      this.store.claimOwner(actor.openid, { nickname: actor.nickname, scene: member.scene, sceneName: actor.sceneName, claimedAt: member.claimedAt });
+      this.pairing.recordClaimed(member);
+      return { ok: true, message: `✅ 已把「${actor.nickname || openidTail(actor.openid)}」设为斜杠命令超管（${member.scene === 'group' ? '群' : '私聊'}）。` };
+    }
+    // 白名单：写入 cordis.patch 的 access。<purpose> 决定写 c2cAllow / groupAllow。
+    const access = this.config.access;
+    const nextAccess = result.purpose === 'allow-group'
+      ? { ...access, groupMode: 'allowlist' as const, groupAllow: [...new Set([...access.groupAllow, actor.openid])] }
+      : { ...access, c2cMode: 'allowlist' as const, c2cAllow: [...new Set([...access.c2cAllow, actor.openid])] };
+    const persisted = updateProfileConfig({ access: nextAccess }, getProfileDir() ?? undefined, this.logger);
+    this.pairing.recordClaimed(member);
+    if (!persisted) return { ok: true, message: `✅ 已核对「${actor.nickname || openidTail(actor.openid)}」，但写入 profile 失败（源码直载？）。请手动加入白名单。` };
+    return { ok: true, message: `✅ 已把「${actor.nickname || openidTail(actor.openid)}」加入${result.purpose === 'allow-group' ? '群' : '私聊'}白名单。` };
+  }
+
+  /** Web：撤销一个已认领身份（超管 / 白名单）。 */
+  revokePair(openid: string, purpose: PairPurpose): { ok: boolean; message: string } {
+    this.pairing.forget(openid);
+    if (purpose === 'owner') { this.store.revokeOwner(openid); return { ok: true, message: '已移除超管' }; }
+    const access = this.config.access;
+    const nextAccess = purpose === 'allow-group'
+      ? { ...access, groupAllow: access.groupAllow.filter((id) => id !== openid) }
+      : { ...access, c2cAllow: access.c2cAllow.filter((id) => id !== openid) };
+    const persisted = updateProfileConfig({ access: nextAccess }, getProfileDir() ?? undefined, this.logger);
+    return { ok: persisted, message: persisted ? '已从白名单移除' : '写入失败，请手动移除' };
+  }
   isOwner(actor?: string): boolean { return !!actor && this.store.ownerIds().includes(actor); }
   slashAllowed(scope: ChatScope, peerId: string, actor?: string): boolean { return this.isOwner(actor) || this.entry(scope, peerId).settings?.slashCommands !== false; }
   canManage(scope: ChatScope, peerId: string, actor?: string): boolean {

@@ -11,8 +11,12 @@ type StoredMessage = { cursor: number; message: GroupMessageRecord; order?: numb
 interface TimelineState { nextOrder: number; nextChange: number }
 interface DeliveryReservation { key: string; hash: string; publish?: boolean; published?: boolean; at?: number; order?: number; change?: number; state?: DeliveryRecord['state']; parts?: DeliveryRecord['parts']; retired?: boolean }
 interface BackgroundState { next: number; consumed: number; published: StoredMessage[]; seen: string[] }
+/** 认领成员展示资料（授权真相仍是 owners / access 白名单；这里只存昵称/场景用于 UI）。 */
+export interface MemberProfile { nickname: string; scene: 'group' | 'c2c'; sceneName: string; claimedAt: number }
 interface Catalog {
   format: 2; appId: string; owners: string[]; entries: ConversationEntry[];
+  /** openid -> 展示资料；可选（旧目录无此字段）。 */
+  memberProfiles?: Record<string, MemberProfile>;
   defaults: QQDefaults;
   background: Record<string, BackgroundState>;
   operations: Record<string, DeliveryReservation>;
@@ -123,7 +127,30 @@ export class ConversationStore {
     this.assertWritable();
     const owners = strings(ids);
     if (owners.some((id) => id.length > 1_024) || owners.length > 100) throw new TypeError('Too many QQ owner identities');
-    this.commit({ ...this.catalog, owners });
+    const profiles = { ...(this.catalog.memberProfiles ?? {}) };
+    // 删除已不在名单里的 profile，避免残留展示资料。
+    for (const id of Object.keys(profiles)) if (!owners.includes(id)) delete profiles[id];
+    this.commit({ ...this.catalog, owners, memberProfiles: profiles });
+  }
+  /** 全部认领成员资料（openid -> profile）。 */
+  public memberProfiles(): Record<string, MemberProfile> { return clone(this.catalog.memberProfiles ?? {}); }
+  /** 认领：把 openid 加入 owners 并记录展示资料（幂等，重复认领更新资料/时间）。 */
+  public claimOwner(openid: string, profile: MemberProfile): void {
+    this.assertWritable();
+    const [id] = strings([openid]);
+    if (id === undefined) throw new TypeError('QQ 用户标识无效');
+    const owners = [...new Set([...this.catalog.owners, id])];
+    if (owners.length > 100) throw new TypeError('Too many QQ owner identities');
+    const profiles = { ...(this.catalog.memberProfiles ?? {}), [id]: profile };
+    this.commit({ ...this.catalog, owners, memberProfiles: profiles });
+  }
+  /** 撤销超管：从 owners 移除并删展示资料。 */
+  public revokeOwner(openid: string): void {
+    this.assertWritable();
+    const owners = this.catalog.owners.filter((id) => id !== openid);
+    const profiles = { ...(this.catalog.memberProfiles ?? {}) };
+    delete profiles[openid];
+    this.commit({ ...this.catalog, owners, memberProfiles: profiles });
   }
 
   public ensure(scope: ConversationEntry['scope'], peerId: string, options: EnsureOptions = {}): ConversationEntry {
@@ -875,7 +902,7 @@ export class ConversationStore {
       if (timeline[key].nextOrder < 1 || timeline[key].nextChange < 1) throw new Error('Invalid QQ timeline cursor');
     }
     const defaults = data.defaults === undefined ? { version: 1, settings: validateQQAgentSettings(this.options.defaultSettings?.() ?? defaultQQAgentSettings()) } : validateQQDefaults(data.defaults);
-    return { format: 2, appId: this.appId, owners: strings(data.owners), entries, defaults, background, operations, timeline };
+    return { format: 2, appId: this.appId, owners: strings(data.owners), entries, defaults, background, operations, timeline, ...(data.memberProfiles !== undefined && typeof data.memberProfiles === 'object' && data.memberProfiles !== null ? { memberProfiles: data.memberProfiles as Record<string, MemberProfile> } : {}) };
   }
 }
 

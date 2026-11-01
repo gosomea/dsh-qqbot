@@ -2,6 +2,7 @@ import { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import type { Context } from '@deepseek-ai/cordis';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { CONVERSATIONS_PATH, type ConversationActionResult } from '../shared/conversation-protocol.ts';
+import { PAIR_ISSUE_PATH, PAIR_REVOKE_PATH, PAIR_STATUS_PATH, type PairPurpose } from '../shared/pairing-protocol.ts';
 import type { WebServerLike } from '../setup/bind-routes.ts';
 import type { ConversationService } from './conversation-service.ts';
 import { ConversationConflictError } from '../conversations/index.ts';
@@ -109,6 +110,32 @@ export function registerConversationRoutes(ctx: Context, service: ConversationSe
       }
     };
     const disposers = ['', '/action', '/detail', '/defaults', '/settings', '/lifecycle', '/recording', '/timeline'].map(suffix => server.register({ kind: 'exact', path: CONVERSATIONS_PATH + suffix, handler }));
+    const pairHandler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      try {
+        if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return json(res, 403, { error: '跨来源请求被拒绝' });
+        const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+        if (pathname === PAIR_STATUS_PATH) return json(res, 200, service.pairStatus());
+        if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+        const body = await readBody(req);
+        if (pathname === PAIR_ISSUE_PATH) {
+          const purpose = body.purpose;
+          if (purpose !== 'owner' && purpose !== 'allow-c2c' && purpose !== 'allow-group') throw new Error('认领用途无效');
+          return json(res, 200, { ...service.issuePairCode(purpose as PairPurpose), ...service.pairStatus() });
+        }
+        if (pathname === PAIR_REVOKE_PATH) {
+          const openid = field(body, 'openid'); const purpose = body.purpose;
+          if (purpose !== 'owner' && purpose !== 'allow-c2c' && purpose !== 'allow-group') throw new Error('认领用途无效');
+          const result = service.revokePair(openid, purpose as PairPurpose);
+          return json(res, result.ok ? 200 : 400, { ...result, ...service.pairStatus() });
+        }
+        return json(res, 404, { error: '未知配对操作' });
+      } catch (error) {
+        json(res, 400, { error: error instanceof Error ? error.message : '配对操作失败' });
+      }
+    };
+    disposers.push(server.register({ kind: 'exact', path: PAIR_STATUS_PATH, handler: pairHandler }));
+    disposers.push(server.register({ kind: 'exact', path: PAIR_ISSUE_PATH, handler: pairHandler }));
+    disposers.push(server.register({ kind: 'exact', path: PAIR_REVOKE_PATH, handler: pairHandler }));
     scoped.effect(() => () => { for (const dispose of disposers) dispose(); }, 'im-qqbot.conversations');
   });
 }

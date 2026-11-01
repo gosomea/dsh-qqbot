@@ -173,6 +173,10 @@ export function installConversationStyles(): void {
 .imqq-welcome { margin: auto; max-width: 560px; padding: 32px; text-align: center; }
 .imqq-welcome > svg { width: 36px; height: 36px; margin-bottom: 12px; color: var(--dsw-alias-label-secondary); }
 .imqq-welcomeActions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.imqq-welcomeTitle { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.imqq-welcomeTitle > h3 { margin: 0; }
+.imqq-welcomeState { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-tertiary); }
+.imqq-welcomeState::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-state-success-primary); display: inline-block; }
 .imqc fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .imqc-field > span, .imqc-inline > span { min-width: 0; width: 100%; }
 .imqc-inline > span { flex: 1; }
