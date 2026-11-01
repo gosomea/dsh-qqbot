@@ -1,8 +1,7 @@
-import { createElement as h, useEffect, useRef, useState, type ReactNode, type ChangeEvent } from 'react';
+import { createElement as h, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
 import type { ConversationView, DeliveryRecord } from '../shared/conversation-protocol.ts';
-import { splitLines } from './conversation-state.ts';
 import type { RuntimeStateWire } from '../shared/runtime-protocol.ts';
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives';
 import { BindPanelBody, QQ_BOT_LOGO_PATH, useBindState } from './bind-page.ts';
@@ -12,6 +11,7 @@ export { QQConversationView } from './qq-conversation-view.ts';
 import { QQOperationDialog } from './qq-operation-dialog.ts';
 import { deliveryExplanation, deliverySummary, passiveReplyFeedback } from './delivery-feedback.ts';
 import { QQSessionStore, useQQSessionStore, type QQAnswerPreview } from './qq-session-store.ts';
+import { PairClaimPanel } from './qq-pairing.ts';
 
 const PHASE_LABELS: Record<RuntimeStateWire['phase'], string> = { unbound: '等待绑定', connecting: '正在连接', ready: '已连接', reconnecting: '正在重连', failed: '连接失败', stopped: '已停止' };
 export function activityLabel(timestamp: number | null, now = Date.now()): string {
@@ -44,25 +44,11 @@ export function ConversationPanel({ onOpenSettings, store }: ConversationPanelPr
     resumable ? h('p', { className: 'imqc-hint' }, `「继续」会打开最近活跃对话「${resumable.name}」的当前会话；要开新会话，请在左侧该对话的「＋」或菜单里新建。`) : null);
 }
 
-export function QQAccountOwners({ store, t }: { store: QQSessionStore; t?: import('./qq-locale.ts').QQTranslate }): ReactNode {
-  const directory = useQQSessionStore(store);
-  const [ownersOpen, setOwnersOpen] = useState(false);
-  const [owners, setOwners] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const pending = useRef(false);
-  const ready = directory.directory !== null && !directory.loading && directory.error === null;
+export function QQAccountOwners({ t }: { store: QQSessionStore; t?: import('./qq-locale.ts').QQTranslate }): ReactNode {
   const title = t ? t('owners.title') : '斜杠命令超管';
-  const count = directory.directory?.ownerIds.length ?? 0;
   return h('section', { className: 'imqc', 'aria-label': title }, h('h3', null, title),
-    h('p', { className: 'imqc-hint' }, ready ? (t ? t('owners.count', { count }) : `${count} 个 OpenID。斜杠命令超管见下方说明。`) : directory.error ? '无法读取所有者名单，请刷新后重试。' : '正在读取所有者名单…'),
     h('p', { className: 'imqc-hint' }, t ? t('owners.hint') : '在任何 QQ 会话里都能使用斜杠命令（含 /model、/preset、/permission 等改动类命令）、审批工具调用、回答机器人提问与中止任务。它不开放工具、也不绕过执行权限——工具与权限仍在会话设置里配置。'),
-    h(Button, { variant: 'outline', size: 'sm', disabled: busy || !ready, onClick: () => { setOwnersOpen(!ownersOpen); setOwners((directory.directory?.ownerIds ?? []).join('\n')); } }, ownersOpen ? '取消编辑' : '编辑名单'),
-    ownersOpen ? h('div', { className: 'imqc-preview' }, h('p', { className: 'imqc-hint' }, 'QQ 所有者 OpenID，每行一个'),
-      h('textarea', { rows: 3, disabled: busy || !ready, value: owners, 'aria-label': '机器人所有者 OpenID', onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setOwners(event.target.value) }),
-      error ? h('p', { className: 'imqc-error', role: 'alert' }, error) : null,
-      h(Button, { variant: 'outline', size: 'sm', disabled: busy || !ready, onClick: () => { if (pending.current || !ready) return; pending.current = true; setBusy(true); setError(null); void store.perform({ action: 'owners', ownerIds: splitLines(owners) }).then(() => setOwnersOpen(false)).catch((cause: unknown) => setError(errorMessage(cause))).finally(() => { pending.current = false; setBusy(false); }); } }, busy ? '保存中…' : '保存')) : null,
-    !ready ? h(Button, { variant: 'ghost', size: 'sm', disabled: directory.loading, onClick: store.refresh }, directory.loading ? '读取中…' : '刷新所有者名单') : null);
+    h(PairClaimPanel, { purpose: 'owner', title, hint: '生成一次性配对码，然后在 QQ 里给机器人发送 /claim 码，即可把你设为超管。' }));
 }
 
 function errorMessage(cause: unknown): string { return cause instanceof Error ? cause.message : '操作失败'; }

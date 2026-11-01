@@ -59,6 +59,8 @@ export interface QQAgentSettingsFormProps {
   readonly onCreateWorkspace?: (path: string) => Promise<{ workspaceId: string; title: string; path: string }>;
   /** Host default workspace name for display. */
   readonly defaultWorkspaceName?: string;
+  /** QQ default working directory (shown when cwd is empty). */
+  readonly defaultCwd?: string;
   /** Which surface hosts this shared form; only changes tool-area copy. Defaults to 'conversation'. */
   readonly scope?: 'defaults' | 'conversation';
   /** The chat scope of the conversation this form edits (group vs c2c); drives which extra-prompt field shows. */
@@ -66,7 +68,7 @@ export interface QQAgentSettingsFormProps {
 }
 
 /** Draft fields only. The parent owns persistence, versions and conflict handling. */
-export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, workspaces = [], onCreateWorkspace, defaultWorkspaceName = '默认工作区', scope = 'conversation', chatScope = 'group', onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
+export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false, askTools = [], commands = [], onPickDirectory, workspaces = [], onCreateWorkspace, defaultWorkspaceName = '默认工作区', defaultCwd, scope = 'conversation', chatScope = 'group', onChange, onRefreshCatalog }: QQAgentSettingsFormProps): ReactNode {
   const [cwdBusy, setCwdBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -194,7 +196,7 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
       visible.length === 0 ? h('p', { className: 'imqc-hint' }, onlySelected ? '还没有勾选任何工具。' : '没有匹配的工具。') : null,
       h('div', { className: 'imqc-actions imqc-toolPickerFoot' }, h(Button, { variant: 'primary', size: 'sm', onClick: () => setToolsOpen(false) }, '完成选择'))) }) : null),
     h('div', { className: 'imqc-field' }, h('span', null, '工作目录'),
-      h('div', { className: 'imqc-inline' }, h(Input, { value: settings.cwd, disabled, placeholder: '留空使用 QQ 默认工作目录', 'aria-label': '工作目录', onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, cwd: event.target.value }) }),
+      h('div', { className: 'imqc-inline' }, h(Input, { value: settings.cwd, disabled, placeholder: defaultCwd ? `留空使用 QQ 默认工作目录：${defaultCwd}` : '留空使用 QQ 默认工作目录', 'aria-label': '工作目录', onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ ...settings, cwd: event.target.value }) }),
         (onPickDirectory || onCreateWorkspace) ? h(Button, { variant: 'outline', size: 'sm', disabled: disabled || cwdBusy, onClick: () => {
           if (!onPickDirectory) return;
           setCwdBusy(true);
@@ -206,6 +208,7 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
           }).finally(() => setCwdBusy(false));
         } }, cwdBusy ? '处理中…' : '选择文件夹…') : null)),
       workspaces.length > 0 ? h(QQSelect, { label: '工作目录（从已有工作区选择）', value: workspaces.find(ws => ws.path === settings.cwd)?.workspaceId ?? '', disabled, placeholder: '从已有工作区选择（不改则手动填写）', options: workspaces.map(ws => ({ value: ws.workspaceId, label: `${qqWorkspaceTitle(ws.title, ws.path, defaultWorkspaceName)}`, description: ws.path })), onChange: id => { const ws = workspaces.find(x => x.workspaceId === id); if (ws) onChange({ ...settings, cwd: ws.path }); } }) : null,
+      defaultCwd ? h('p', { className: 'imqc-hint' }, `默认工作目录：${defaultCwd}`) : null,
     ((): ReactNode => {
       // 补充提示词按 scope 分离：会话设置只显示当前 scope；新对话默认值两个都显示。
       const field = (key: 'promptGroup' | 'promptDirect', label: string): ReactNode => h('label', { className: 'imqc-field', key }, h('span', null, label), h('textarea', { rows: 4, value: settings[key], disabled, maxLength: 20_000, 'aria-label': label, onChange: (event: ChangeEvent<HTMLTextAreaElement>) => onChange({ ...settings, [key]: event.target.value }) }));

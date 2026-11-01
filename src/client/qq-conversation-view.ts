@@ -76,7 +76,7 @@ export function QQConversationView({ sessionId, store, selectorSource, t, useSes
           entry.archived ? h('div', { className: 'imqc-banner', role: 'status' }, h('strong', null, '当前 QQ 会话已归档'), h('p', null, '取消归档后继续接收，或新建会话。'),
             h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => setUnarchive(true) }, '取消归档继续…'),
             unarchive ? h('div', { className: 'imqc-actions' }, h('p', null, '确认取消归档并让 QQ 消息继续进入此会话？'), h(Button, { variant: 'primary', size: 'sm', disabled: busy, onClick: restore }, '确认取消归档'), h(Button, { variant: 'ghost', size: 'sm', disabled: busy, onClick: () => setUnarchive(false) }, '取消')) : null) : null,
-          h(QQPeerSettings, { key: entry.key, entry, store, tools: state.directory?.tools ?? [], commands: state.directory?.commands ?? [], selectorSource, t, workspaces: workspaceChoices, defaultWorkspaceName })) : null,
+          h(QQPeerSettings, { key: entry.key, entry, store, tools: state.directory?.tools ?? [], commands: state.directory?.commands ?? [], selectorSource, t, workspaces: workspaceChoices, defaultWorkspaceName, defaultCwd: state.directory?.defaultCwd })) : null,
       tab === 'messages' ? h(QQMessageTimeline, { key: entry.key, entry, store }) : null));
 }
 export function QQMessageTimeline({ entry, store }: { entry: ConversationView; store: QQSessionStore }): ReactNode {

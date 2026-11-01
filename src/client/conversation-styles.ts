@@ -89,6 +89,13 @@ export function installConversationStyles(): void {
 .imqc-toolCheckbox > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .imqc-tool small { margin-top: 2px; }
 .imqc-preview { border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); padding: 12px; margin-top: 10px; background: var(--dsw-alias-bg-layer-1); }
+.imqc-pair { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-1); }
+.imqc-pair > .imqc-inline { justify-content: space-between; }
+.imqc-pairCode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.imqc-pairCode code { font-size: 15px; font-weight: 600; letter-spacing: 1px; padding: 2px 8px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.imqc-pairMembers { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.imqc-pairMembers > li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 0.5px solid var(--dsw-alias-border-l2); }
+.imqc-pairMembers > li > span { min-width: 0; overflow-wrap: anywhere; }
 .imqc-preview pre, .imqc-messageText { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 7px 0; }
 .imqc-history { display: grid; gap: 5px; }
 .imqc-history button { text-align: left; overflow-wrap: anywhere; }

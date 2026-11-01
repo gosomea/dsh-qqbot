@@ -323,7 +323,7 @@ export class ConversationService {
       const record = this.manager.getSessionRecord(entry.scope, entry.peerId);
       if (record) this.refreshCatalog(record.agent);
     }
-    return { ownerIds: this.store.ownerIds(), defaults: this.store.defaults(), errors: [...this.store.errors(), ...this.operationRetention.errors()], tools: [...this.catalogs.values()], commands: this.commandDescriptors(), conversations: this.store.list().map(entry => {
+    return { ownerIds: this.store.ownerIds(), defaults: this.store.defaults(), defaultCwd: resolveAgentCwd(this.config.cwd), errors: [...this.store.errors(), ...this.operationRetention.errors()], tools: [...this.catalogs.values()], commands: this.commandDescriptors(), conversations: this.store.list().map(entry => {
       const status = this.manager.getStatus(entry.scope, entry.peerId);
       const record = this.manager.getSessionRecord(entry.scope, entry.peerId);
       const workspace = entry.workspaceId ? this.ctx.get('workspaceRegistry')?.get(WorkspaceId(entry.workspaceId)) : undefined;

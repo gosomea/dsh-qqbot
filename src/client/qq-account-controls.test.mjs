@@ -7,28 +7,19 @@ import { QQSessionStore } from './qq-session-store.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 describe('QQ account controls', () => {
-  it('keeps an unread owner directory distinct from an empty owner list', () => {
+  it('renders the pairing claim panel for owners with a generate button and hint', () => {
     const store = new QQSessionStore({ openSession: () => {} });
-    const loading = renderToStaticMarkup(h(QQAccountOwners, { store }));
-    expect(loading).toContain('正在读取所有者名单');
-    expect(loading).not.toContain('0 个 OpenID');
-    expect(loading).toMatch(/<button[^>]*disabled=""[^>]*>编辑名单/);
-    store.accept({ conversations: [], tools: [], ownerIds: [] });
-    const ready = renderToStaticMarkup(h(QQAccountOwners, { store }));
-    expect(ready).toContain('0 个 OpenID');
-    expect(ready).not.toContain('disabled=""');
+    const markup = renderToStaticMarkup(h(QQAccountOwners, { store }));
+    expect(markup).toContain('斜杠命令超管');
+    expect(markup).toContain('在 QQ 认领');
+    expect(markup).toContain('/claim');
+    expect(markup).not.toContain('每行一个'); // 旧的 openid 手填 textarea 已移除
   });
-  it('keeps owner editing disabled after a directory read failure', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('离线目录错误'); }));
+  it('explains slash-command superadmin authority without openid text field', () => {
     const store = new QQSessionStore({ openSession: () => {} });
-    const stop = store.start();
-    try {
-      await vi.waitFor(() => expect(store.getSnapshot().error).toBe('离线目录错误'));
-      const markup = renderToStaticMarkup(h(QQAccountOwners, { store }));
-      expect(markup).toContain('无法读取所有者名单');
-      expect(markup).not.toContain('0 个 OpenID');
-      expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>编辑名单/);
-    } finally { stop(); }
+    const markup = renderToStaticMarkup(h(QQAccountOwners, { store }));
+    expect(markup).toContain('不开放工具');
+    expect(markup).not.toContain('<textarea');
   });
   it('preserves direct credential and unbind entry points without performing either action', () => {
     const fetch = vi.fn(() => { throw new Error('render must not request account mutations'); });

@@ -9,13 +9,14 @@
  *
  * 这里只维护账号访问范围；Agent 默认设置通过独立的版本化接口保存。
  */
-import { createElement, useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { createElement, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button, SegmentedControl } from '@deepseek-ai/dsh-client-ui-primitives';
 import { BIND_CONFIG_PATH } from '../shared/bind-protocol.ts';
 
 import { fetchJson } from './http.ts';
 import { configDraft, configPatch, DEFAULT_ACCESS, isConfigDirty, normalizeConfig, parseConfigDraft, rebaseConfig, type AccessControlWire, type ConfigDraft, type ConfigWire } from './config-form-state.ts';
 import type { SelectorSource } from './host-selectors.ts';
+import { PairClaimPanel } from './qq-pairing.ts';
 import type { QQBotKey } from './qq-locale.ts';
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots';
 
@@ -85,20 +86,6 @@ function useConfigPanelStyles(): void {
     document.head.appendChild(style);
     return retain(style);
   }, []);
-}
-
-/** 多行文本行 */
-function AreaRow({ label, help, value, rows, onChange, disabled = false }: {
-  label: string; help?: string; value: string; rows?: number; onChange: (next: string) => void; disabled?: boolean;
-}): ReactNode {
-  return createElement('label', { className: 'imqb2-field' },
-    createElement('span', { className: 'imqb2-label' }, label),
-    createElement('textarea', {
-      className: 'imqb2-textarea', value, rows: rows ?? 3, disabled,
-      onChange: (event: ChangeEvent<HTMLTextAreaElement>) => { onChange(event.currentTarget.value); },
-    }),
-    help === undefined ? null : createElement('p', { className: 'imqb2-hint' }, help),
-  );
 }
 
 /** 访问模式分段选择行 */
@@ -317,12 +304,6 @@ export function ConfigPanel({ bindPhase }: ConfigPanelProps): ReactNode {
   const { baseline, form } = draft;
   const dirty = isConfigDirty(baseline, form);
   const access = form.access ?? DEFAULT_ACCESS;
-  const allowHelp = (values: string[], subject: string): string => {
-    const count = values.filter((value) => value.trim()).length;
-    return count === 0
-      ? `名单为空，当前不允许任何${subject}访问。填写 openid（不是 QQ 号），每行一个。`
-      : `已填写 ${count} 个${subject}。使用 openid（不是 QQ 号），每行一个。`;
-  };
   const message = busy ? '正在保存配置…' : result?.message ?? (dirty
     ? draftNotice ?? '有未保存修改。保存会重载插件，并中断正在运行的 QQ 任务。'
     : '没有未保存的修改。');
@@ -335,18 +316,12 @@ export function ConfigPanel({ bindPhase }: ConfigPanelProps): ReactNode {
         label: '私聊', value: access.c2cMode, options: MODE_OPTIONS,
         onChange: (value) => { patch('access', { ...access, c2cMode: value }); },
       }),
-      access.c2cMode === 'allowlist' ? createElement(AreaRow, { disabled: busy,
-        label: '私聊白名单', help: allowHelp(access.c2cAllow, '用户'), rows: 3,
-        value: access.c2cAllow.join('\n'), onChange: (value) => { patch('access', { ...access, c2cAllow: value.split('\n') }); },
-      }) : null,
+      access.c2cMode === 'allowlist' ? createElement(PairClaimPanel, { purpose: 'allow-c2c', title: '私聊白名单', hint: '生成配对码，让对方在私聊里给机器人发送 /claim 码，即加入私聊白名单。' }) : null,
       createElement(SegmentedRow, { disabled: busy,
         label: '群聊', value: access.groupMode, options: MODE_OPTIONS,
         onChange: (value) => { patch('access', { ...access, groupMode: value }); },
       }),
-      access.groupMode === 'allowlist' ? createElement(AreaRow, { disabled: busy,
-        label: '群聊白名单', help: allowHelp(access.groupAllow, '群'), rows: 3,
-        value: access.groupAllow.join('\n'), onChange: (value) => { patch('access', { ...access, groupAllow: value.split('\n') }); },
-      }) : null,
+      access.groupMode === 'allowlist' ? createElement(PairClaimPanel, { purpose: 'allow-group', title: '群白名单', hint: '生成配对码，让群成员在群里 @ 机器人发送 /claim 码，即把该群加入白名单。' }) : null,
 
 
     ),
