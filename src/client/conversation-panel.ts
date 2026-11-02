@@ -12,6 +12,7 @@ import { QQOperationDialog } from './qq-operation-dialog.ts';
 import { deliveryExplanation, deliverySummary, passiveReplyFeedback } from './delivery-feedback.ts';
 import { QQSessionStore, useQQSessionStore, type QQAnswerPreview } from './qq-session-store.ts';
 import { PairClaimPanel } from './qq-pairing.ts';
+import { SlashCommandList } from './slash-command-list.ts';
 
 const PHASE_LABELS: Record<RuntimeStateWire['phase'], string> = { unbound: '等待绑定', connecting: '正在连接', ready: '已连接', reconnecting: '正在重连', failed: '连接失败', stopped: '已停止' };
 export function activityLabel(timestamp: number | null, now = Date.now()): string {
@@ -44,11 +45,13 @@ export function ConversationPanel({ onOpenSettings, store }: ConversationPanelPr
     resumable ? h('p', { className: 'imqc-hint' }, `「继续」会打开最近活跃对话「${resumable.name}」的当前会话；要开新会话，请在左侧该对话的「＋」或菜单里新建。`) : null);
 }
 
-export function QQAccountOwners({ t, bound = true }: { store: QQSessionStore; t?: import('./qq-locale.ts').QQTranslate; bound?: boolean }): ReactNode {
+export function QQAccountOwners({ store, t, bound = true }: { store: QQSessionStore; t?: import('./qq-locale.ts').QQTranslate; bound?: boolean }): ReactNode {
   const title = t ? t('owners.title') : '斜杠命令超管';
+  const commands = useQQSessionStore(store).directory?.commands ?? [];
   return h('section', { className: 'imqc', 'aria-label': title }, h('h3', null, title),
     h('p', { className: 'imqc-hint' }, t ? t('owners.hint') : '在任何 QQ 会话里都能使用斜杠命令（含 /model、/preset、/permission 等改动类命令）、审批工具调用、回答机器人提问与中止任务。它不开放工具、也不绕过执行权限——工具与权限仍在会话设置里配置。'),
-    h(PairClaimPanel, { purpose: 'owner', title, enabled: bound, hint: '点「添加…」生成一次性配对码，然后在 QQ 里直接给机器人发送这个码；对方点「确认」后即可加入。' }));
+    h(PairClaimPanel, { purpose: 'owner', title, enabled: bound, hint: '点「添加…」生成一次性配对码，然后在 QQ 里直接给机器人发送这个码；对方点「确认」后即可加入。' }),
+    commands.length > 0 ? h(SlashCommandList, { commands }) : null);
 }
 
 function errorMessage(cause: unknown): string { return cause instanceof Error ? cause.message : '操作失败'; }

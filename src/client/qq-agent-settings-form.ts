@@ -6,6 +6,7 @@ import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { defaultModelLabel, defaultPresetLabel, findModel, modelChoiceId, modelLabel, presetLabel } from './host-selectors.ts';
 import type { QQAgentCatalog } from './qq-agent-catalog.ts';
 import { QQSelect, WorkspaceCwdSelect, type QQSelectOption } from './qq-controls.ts';
+import { SlashCommandList } from './slash-command-list.ts';
 
 const PERMISSIONS: ReadonlyArray<{ value: ConversationSandboxMode; label: string }> = [
   { value: 'read-only', label: '仅可查看' },
@@ -219,18 +220,7 @@ export function QQAgentSettingsForm({ settings, tools, catalog, disabled = false
     })(),
     h('div', { className: 'imqc-inline' }, h('span', null, '斜杠命令'), h(Switch, { label: '斜杠命令', checked: settings.slashCommands, disabled, onChange: slashCommands => onChange({ ...settings, slashCommands }) })),
     h('p', { className: 'imqc-hint' }, '关闭后，普通用户的 / 命令返回停用提示；机器人所有者仍可使用命令。'),
-    h('details', { className: 'imqc-cmdList' }, h('summary', null, `查看支持的斜杠命令（${commands.length} 个）`),
-      commands.length === 0 ? h('p', { className: 'imqc-hint' }, '暂无可用命令。') : null,
-      ...(['agent', 'qqbot'] as const).map((category) => {
-        const items = commands.filter((command) => command.category === category && command.hidden !== true);
-        if (items.length === 0) return null;
-        return h('div', { className: 'imqc-cmdGroup', key: category },
-          h('strong', null, category === 'agent' ? '通用能力' : 'QQ 内置'),
-          ...items.map((command) => h('div', { className: 'imqc-cmdRow', key: command.name },
-            h('code', null, `/${command.name}`),
-            command.aliases.length ? h('span', { className: 'imqc-hint' }, `（别名 /${command.aliases.join('、/')}）`) : null,
-            h('span', { className: 'imqc-hint' }, command.description))));
-      })),
+    h(SlashCommandList, { commands }),
     catalog.loading ? h('p', { role: 'status', className: 'imqc-hint' }, '正在读取宿主模型和 Agent 预设目录…') : null,
     [...catalog.errors, ...(catalog.models?.failures ?? [])].map((error, index) => h('p', { key: index, role: 'alert', className: 'imqc-error' }, error)),
     catalog.errors.length ? h(Button, { variant: 'ghost', size: 'sm', disabled: disabled || catalog.loading, onClick: onRefreshCatalog }, '重试读取宿主目录') : null);

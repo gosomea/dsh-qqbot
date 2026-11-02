@@ -98,6 +98,12 @@ export function installConversationStyles(): void {
 .imqc-pairExample { margin: 0; padding: 8px 10px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); font-size: 12px; white-space: pre-wrap; color: var(--dsw-alias-label-secondary); }
 .imqc-pairTextarea { box-sizing: border-box; width: 100%; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); font: inherit; color: var(--dsw-alias-label-primary); line-height: 1.5; resize: vertical; }
 .imqc-pairModal { width: min(560px, calc(100vw - 32px)); }
+.imqc-cmdList { margin: 6px 0; font-size: 12px; }
+.imqc-cmdList > summary { cursor: pointer; color: var(--dsw-alias-label-secondary); }
+.imqc-cmdGroup { margin: 8px 0 4px; display: flex; flex-direction: column; gap: 3px; }
+.imqc-cmdGroup > strong { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.imqc-cmdRow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.imqc-cmdRow > code { font-size: 12px; padding: 0 5px; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .imqc-pairManual { flex-wrap: nowrap; }
 .imqc-pairManual > :first-child { flex: 1; min-width: 120px; }
 .imqc-pairCodeCard { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-2); }
