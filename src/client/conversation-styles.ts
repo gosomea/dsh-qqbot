@@ -100,7 +100,11 @@ export function installConversationStyles(): void {
 .imqc-pairModal { width: min(560px, calc(100vw - 32px)); }
 .imqc-pairManual { flex-wrap: nowrap; }
 .imqc-pairManual > :first-child { flex: 1; min-width: 120px; }
-.imqc-pairCode code { font-size: 15px; font-weight: 600; letter-spacing: 1px; padding: 2px 8px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.imqc-pairCodeCard { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-layer-2); }
+.imqc-pairCodeMain { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.imqc-pairCodeValue { font-size: 24px; font-weight: 700; letter-spacing: 4px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); }
+.imqc-pairCodeMeta { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.imqc-pairCodeActions { display: flex; align-items: center; gap: 8px; flex: none; }
 .imqc-pairMembers { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .imqc-pairMember { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); }
 .imqc-pairMemberMain { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

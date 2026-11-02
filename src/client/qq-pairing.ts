@@ -49,6 +49,11 @@ export function PairClaimPanel({ purpose, title, hint, enabled = true }: {
   const [manualOpenid, setManualOpenid] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<{ openid: string; nickname: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copyPairCode = useCallback(async (value: string): Promise<void> => {
+    try { await (globalThis.navigator?.clipboard?.writeText?.(value) ?? Promise.reject(new Error('no clipboard'))); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch { /* 剪贴板不可用时静默：码本身可见可手抄 */ }
+  }, []);
 
   // 该码"曾在轮询中出现过、之后又消失"才算认领成功（否则刚生成的瞬间会被误判）。
   const codeSeen = useRef(false);
@@ -135,10 +140,14 @@ export function PairClaimPanel({ purpose, title, hint, enabled = true }: {
           h('li', null, '下面生成一次性配对码；'),
           h('li', null, `让对方在${purpose === 'allow-group' ? '群里 @ 机器人' : '私聊里'}发送这个码（直接发码即可，不用加 /claim）：`),
           h('li', null, '机器人会自动匹配 TA 的昵称与 openID，并弹出「确认/取消」，点「确认」后加入。')),
-        code ? h('div', { className: 'imqc-pairCode' },
-          h('code', null, code.code),
-          h('span', { className: 'imqc-hint' }, `（${secs}s 内有效；左侧「重新生成」可换码）`)) : h('p', { className: 'imqc-hint' }, '正在生成配对码…'),
-        h('div', { className: 'imqc-inline' }, h(Button, { variant: 'ghost', size: 'sm', disabled: busy, onClick: issue }, '重新生成配对码')),
+        code ? h('div', { className: 'imqc-pairCodeCard' },
+          h('div', { className: 'imqc-pairCodeMain' },
+            h('code', { className: 'imqc-pairCodeValue' }, code.code),
+            h('span', { className: 'imqc-pairCodeMeta' }, `${secs}s 内有效`)),
+          h('div', { className: 'imqc-pairCodeActions' },
+            h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => { void copyPairCode(code.code); } }, copied ? '已复制' : '复制'),
+            h(Button, { variant: 'primary', size: 'sm', disabled: busy, onClick: issue }, busy ? '生成中…' : '重新生成')))
+          : h('p', { className: 'imqc-hint' }, '正在生成配对码…'),
         h('h4', { className: 'imqc-pairSectionTitle' }, '方式二 · 直接按 openID 添加'),
         h('p', { className: 'imqc-hint' }, '每行一个（也支持用逗号分隔）。格式：openID 或 openID:昵称。例如：'),
         h('pre', { className: 'imqc-pairExample' }, 'ABCD1234EFGH\nWXYZ5678:小明\nIJKL0000:Alice Zhang'),
