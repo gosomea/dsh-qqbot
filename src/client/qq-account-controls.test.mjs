@@ -12,7 +12,8 @@ describe('QQ account controls', () => {
     const markup = renderToStaticMarkup(h(QQAccountOwners, { store }));
     expect(markup).toContain('斜杠命令超管');
     expect(markup).toContain('添加');
-    expect(markup).toContain('/claim');
+    expect(markup).toContain('直接给机器人发送这个码');
+    expect(markup).not.toContain('/claim');
     expect(markup).not.toContain('每行一个'); // 旧的 openid 手填 textarea 已移除
   });
   it('explains slash-command superadmin authority without openid text field', () => {

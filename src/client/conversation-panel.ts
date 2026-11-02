@@ -48,7 +48,7 @@ export function QQAccountOwners({ t, bound = true }: { store: QQSessionStore; t?
   const title = t ? t('owners.title') : '斜杠命令超管';
   return h('section', { className: 'imqc', 'aria-label': title }, h('h3', null, title),
     h('p', { className: 'imqc-hint' }, t ? t('owners.hint') : '在任何 QQ 会话里都能使用斜杠命令（含 /model、/preset、/permission 等改动类命令）、审批工具调用、回答机器人提问与中止任务。它不开放工具、也不绕过执行权限——工具与权限仍在会话设置里配置。'),
-    h(PairClaimPanel, { purpose: 'owner', title, enabled: bound, hint: '点「添加…」生成一次性配对码，然后在 QQ 里给机器人发送 /claim 码；对方点「确认」后即可加入。' }));
+    h(PairClaimPanel, { purpose: 'owner', title, enabled: bound, hint: '点「添加…」生成一次性配对码，然后在 QQ 里直接给机器人发送这个码；对方点「确认」后即可加入。' }));
 }
 
 function errorMessage(cause: unknown): string { return cause instanceof Error ? cause.message : '操作失败'; }

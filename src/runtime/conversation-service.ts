@@ -245,7 +245,7 @@ export class ConversationService {
   /** 该文本是否是一个进行中的配对码（供"裸 token"拦截判断，不核销）。 */
   isActivePairCode(text: string): boolean { return this.pairing.hasActiveCode(text); }
 
-  /** 由 QQ 侧发起认领（/claim 命令或裸 token 共用）：解析 actor + startClaim。 */
+  /** 由 QQ 侧发起认领（群里/私聊直接发送配对码）：解析 actor + startClaim。 */
   beginClaimFromMessage(scope: ChatScope, peerId: string, code: string, senderId: string, senderName?: string): { ok: boolean; message: string } {
     const entry = this.entry(scope, peerId);
     const purpose = this.pairing.peekPurpose(code);

@@ -316,12 +316,12 @@ export function ConfigPanel({ bindPhase }: ConfigPanelProps): ReactNode {
         label: '私聊', value: access.c2cMode, options: MODE_OPTIONS,
         onChange: (value) => { patch('access', { ...access, c2cMode: value }); },
       }),
-      access.c2cMode === 'allowlist' ? createElement(PairClaimPanel, { purpose: 'allow-c2c', title: '私聊白名单', enabled: bindPhase === 'bound', hint: '生成配对码，让对方在私聊里给机器人发送 /claim 码，即加入私聊白名单。' }) : null,
+      access.c2cMode === 'allowlist' ? createElement(PairClaimPanel, { purpose: 'allow-c2c', title: '私聊白名单', enabled: bindPhase === 'bound', hint: '生成配对码，让对方在私聊里直接给机器人发送这个码，即加入私聊白名单。' }) : null,
       createElement(SegmentedRow, { disabled: busy,
         label: '群聊', value: access.groupMode, options: MODE_OPTIONS,
         onChange: (value) => { patch('access', { ...access, groupMode: value }); },
       }),
-      access.groupMode === 'allowlist' ? createElement(PairClaimPanel, { purpose: 'allow-group', title: '群白名单', enabled: bindPhase === 'bound', hint: '生成配对码，让群成员在群里 @ 机器人发送 /claim 码，即把该群加入白名单。' }) : null,
+      access.groupMode === 'allowlist' ? createElement(PairClaimPanel, { purpose: 'allow-group', title: '群白名单', enabled: bindPhase === 'bound', hint: '生成配对码，让群成员在群里 @ 机器人后直接发送这个码，即把该群加入白名单。' }) : null,
 
 
     ),

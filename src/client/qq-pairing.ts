@@ -1,7 +1,7 @@
 /**
  * 配对码认领 UI —— Web 侧生成一次性码、展示已认领成员、撤销。
  *
- * 与 QQ 侧 `/claim 码` 配合：Web 生成码 → 用户在 QQ 发送 → 机器人写名单。
+ * 流程：Web 生成码 → 用户在 QQ 直接发送该码 → 机器人识别并写名单。
  * 本组件只负责 Web 端的码展示与已认领列表；真正的 openid 绑定在服务端完成。
  */
 import { createElement as h, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -138,7 +138,7 @@ export function PairClaimPanel({ purpose, title, hint, enabled = true }: {
         h('h4', { className: 'imqc-pairSectionTitle' }, '方式一 · 让对方在 QQ 认领（推荐）'),
         h('ol', { className: 'imqc-pairSteps' },
           h('li', null, '下面生成一次性配对码；'),
-          h('li', null, `让对方在${purpose === 'allow-group' ? '群里 @ 机器人' : '私聊里'}发送这个码（直接发码即可，不用加 /claim）：`),
+          h('li', null, `让对方在${purpose === 'allow-group' ? '群里 @ 机器人后' : '私聊里'}直接发送这个码：`),
           h('li', null, '机器人会自动匹配 TA 的昵称与 openID，并弹出「确认/取消」，点「确认」后加入。')),
         code ? h('div', { className: 'imqc-pairCodeCard' },
           h('div', { className: 'imqc-pairCodeMain' },
