@@ -28,7 +28,7 @@ import type { QQBotSender } from '../transport/outbound-buffer.ts';
 import { ConversationIngressQueue, ConversationQueue } from './conversation-queue.ts';
 import { nativeSession } from './native-channel.ts';
 import { chunkMarkdownText } from '../transport/chunker.ts';
-
+import { modelReplyText } from '../transport/model-reply.ts';
 import { getCachedReplySources } from '../transport/msgid-cache.ts';
 import { OperationRetention } from './operation-retention.ts';
 import { SessionOperations } from './session-operations.ts';
@@ -1039,6 +1039,18 @@ export class ConversationService {
     }
   }
   cwd(scope: ChatScope, peerId: string): string { const entry = this.entry(scope, peerId); return entry.settings?.cwd || (entry.workspaceId ? this.resolveWorkspace(entry.workspaceId).path : entry.policy.cwd || resolveAgentCwd(this.config.cwd)); }
+  async send(key: string, operationId: string, text: string, source?: { sessionId: string; messageId: string }): Promise<DeliveryRecord> {
+    const entry = this.requireEntry(key);
+    if (source) {
+      if (!entry.sessions.some(row => row.sessionId === source.sessionId)) throw new Error('回答不属于此 QQ 对话');
+      const resolved = await this.ctx.get('sessionController')?.resolveAgent(SessionId(source.sessionId));
+      if (!resolved || 'error' in resolved) throw new Error('无法读取原生回答');
+      const session = this.ctx.get('sessions')?.get(SessionId(source.sessionId));
+      const exists = session?.snapshotEvents().some(event => event.type === 'assistant/message' && event.data.message.id === source.messageId);
+      if (!exists) throw new Error('原生回答不存在，请重新选择');
+    }
+    return this.deliver(key, operationId, source ? modelReplyText(text) : text, { scope: entry.scope, targetId: entry.peerId }, () => this.admitted(entry.scope, entry.peerId), 'manual', { provenance: 'web', ...(source ? { sourceSessionId: source.sessionId, sourceMessageId: source.messageId, answerId: source.messageId } : {}) });
+  }
   private async deliver(key: string, operationId: string, text: string, target: ReplyTarget, allowed: () => boolean, origin: 'qq' | 'manual' = 'qq', provenance: import('../shared/conversation-protocol.ts').DeliveryProvenance = {}): Promise<DeliveryRecord> {
     if (!allowed()) throw new Error('该对话或本轮发送资格已撤销');
     if (!text.trim() || text.length > 100_000) throw new Error('发送内容不能为空或超过 100000 字符');
