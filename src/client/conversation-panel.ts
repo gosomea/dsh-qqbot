@@ -59,6 +59,12 @@ export function QQConversationOverlay({ store, selectorSource, t, useWorkspaces,
   const state = useQQSessionStore(store);
   const workspaces = useWorkspaces((snapshot) => snapshot.items);
   const overlay = state.overlay;
+  if (overlay?.kind === 'archived') return h(Modal, { open: true, title: '此会话已归档', closeLabel: '关闭', onClose: store.closeDrawer,
+    children: h('div', { className: 'imqq-editForm' },
+      h('p', null, '取消归档后可在原生聊天页查看历史，不改变 QQ 消息的接收会话。'),
+      overlay.error ? h('p', { role: 'alert' }, overlay.error) : null,
+      h('div', { className: 'imqq-dialogActions' }, h(Button, { variant: 'ghost', onClick: store.closeDrawer }, '关闭'),
+        h(Button, { variant: 'primary', disabled: overlay.busy, onClick: () => void store.restoreArchived() }, overlay.busy ? '正在取消归档…' : '取消归档并打开'))) });
   if (overlay?.kind === 'drawer') {
     const target = overlay.target;
     const entry = store.conversation(target.key);
