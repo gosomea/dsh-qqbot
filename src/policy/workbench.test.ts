@@ -38,7 +38,7 @@ vi.mock('../model/model-resolver.ts', () => ({
   },
 }));
 
-vi.mock('../host/adapter.ts', () => ({ createHostAdapter: (ctx: Context) => ({ capabilities: [], resolveAgent: async (id: string) => ctx.agents.get(SessionId(id)) }) }));
+vi.mock('../host/adapter.ts', () => ({ createHostAdapter: (ctx: Context) => ({ attachSessionToWorkspace: async () => {}, capabilities: [], resolveAgent: async (id: string) => ctx.agents.get(SessionId(id)) }) }));
 
 const contexts: Context[] = [];
 const roots: string[] = [];

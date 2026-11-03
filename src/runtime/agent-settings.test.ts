@@ -23,7 +23,7 @@ function fixture() {
   let current: SessionRecord | undefined;
   const services: Record<string, unknown> = {};
   const tools = { definitions: () => [{ name: 'read' }], restrict: () => () => {}, guard: () => () => {} };
-  const ctx = { on: () => () => {}, get: (name: string) => name === 'tools' ? tools : name === 'sessions' ? { get: () => session } : name === 'agents' ? { get: () => current?.agent } : services[name] } as unknown as Context;
+  const ctx = { on: () => () => {}, get: (name: string) => name === 'tools' ? tools : name === 'sessions' ? services.sessions ?? { get: () => session } : name === 'agents' ? { get: () => current?.agent } : services[name] } as unknown as Context;
   const config = ConfigSchema({ appId: 'settings', appSecret: 'dummy', cwd: root, groupPrompt: 'old scope', access: { groupMode: 'open', c2cMode: 'open' } });
   const manager = { getDefaultModel: () => ({ provider: 'p', model: 'old' }), getDefaultPreset: () => 'standard', getEffectiveModel: () => route,
     getStatus: () => ({ active: !!current, preset: 'standard', nextPreset: 'chosen' }), findBySessionId: () => current, getSessionRecord: () => current,
@@ -63,6 +63,17 @@ describe('idle per-peer Agent settings', () => {
     expect(next.settings).toMatchObject({ model: before.settings!.model, preset: before.settings!.preset, cwd: before.settings!.cwd,
       promptGroup: 'updated QQ prompt', execution: { kind: 'native', permission: 'workspace-write' } });
     expect(f.permission()).toBe('workspace-write'); expect(f.set).not.toHaveBeenCalled(); expect(f.select).not.toHaveBeenCalled();
+  });
+  it('saves the first cold-session QQ edit against the restored native permission', async () => {
+    const f = peerFixture();
+    let loaded = false;
+    f.services.sessions = { get: () => loaded ? f.session : undefined };
+    f.manager.restoreExisting = async () => { loaded = true; return f.manager.getSessionRecord('group', 'g'); };
+    const before = f.service.requireEntry(f.key);
+    await f.service.savePeerSettings(f.key, before.policy.version, { alias: 'first edit', promptGroup: 'first prompt' });
+    expect(f.service.requireEntry(f.key)).toMatchObject({ alias: 'first edit', currentSessionId: f.session.id,
+      settings: { promptGroup: 'first prompt', execution: { permission: 'workspace-write' } } });
+    expect(f.set).not.toHaveBeenCalled();
   });
   it('rejects the removed slash switch as an unknown peer settings field', async () => {
     const f = peerFixture(); const before = f.service.requireEntry(f.key);

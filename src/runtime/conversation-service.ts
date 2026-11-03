@@ -661,6 +661,15 @@ export class ConversationService {
     if (Object.keys(input).some(field => !allowed.has(field))) throw new Error('模型、预设和工作区请在原生输入框中设置');
     const before = this.requireEntry(key);
     if (!before.settings) throw new Error('QQ 会话设置不可用');
+    // A cold Session is absent from the live registry, not a Session with null permissions.
+    // Establish the native baseline before deriving the patch; keep the queued CAS below.
+    if (before.currentSessionId && !this.ctx.get('sessions')?.get(SessionId(before.currentSessionId))) {
+      this.assertCommandAuthority(before.scope, before.peerId);
+      if (before.policy.version !== expectedVersion) throw new ConversationConflictError('配置已更新，请刷新后重试');
+      if (this.busy(key)) throw new Error('会话正在生成，请停止后再保存设置。');
+      await this.manager.restoreExisting(before.scope, before.peerId);
+      if (this.requireEntry(key).currentSessionId !== before.currentSessionId) throw new ConversationConflictError('会话已更换，请刷新后重试');
+    }
     const currentPermission = (): string | null => {
       const session = before.currentSessionId ? this.ctx.get('sessions')?.get(SessionId(before.currentSessionId)) : undefined;
       return session ? this.ctx.get('permissionPresets')?.current(session) ?? this.persistedPermission(session.snapshotEvents()) ?? null : null;
