@@ -594,7 +594,8 @@ export class SessionManager {
     let workspace: ReturnType<ConversationService['resolveWorkspace']> | undefined;
     try {
       workspace = binding ? this.conversations?.resolveWorkspace(binding) : undefined;
-      await workspace?.attachSession(SessionId(record.sessionId));
+      if (workspace) await workspace.attachSession(SessionId(record.sessionId));
+      else void this.host.attachSessionToWorkspace(sessionId, agent.session.header?.cwd ?? this.conversations?.cwd(scope, peerId) ?? this.workspaceDir());
       this.conversations?.attach(record);
     } catch (error) {
       this.conversations?.release(record.sessionId);
@@ -678,9 +679,10 @@ export class SessionManager {
       senderId: previous?.senderId ?? peerId, lastActivity: Date.now(), agentPreset: composed.agentPreset,
       modelRoute: handle.agent.model?.current() ?? route };
     try {
-      await workspace?.attachSession(id);
+      if (workspace) await workspace.attachSession(id);
       assertBoundary();
       this.conversations?.attach(record, workspaceId === null ? null : bound, composition?.agentPreset);
+      if (!workspace) void this.host.attachSessionToWorkspace(id, cwd);
     } catch (error) {
       this.conversations?.release(id);
       await workspace?.detachSession(id).catch(() => {});

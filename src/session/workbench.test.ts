@@ -22,7 +22,8 @@ vi.mock('../model/model-resolver.ts', () => ({ ModelResolver: class {
   resolveDefault() { return this.getEffectiveRoute(); }
   async validateRoute(route: { provider: string; model: string }) { return route; }
 } }));
-vi.mock('../host/adapter.ts', () => ({ createHostAdapter: () => ({ capabilities: [], resolveAgent: async () => undefined, sessionEvents: () => [] }) }));
+const { attachFallback } = vi.hoisted(() => ({ attachFallback: vi.fn(async () => {}) }));
+vi.mock('../host/adapter.ts', () => ({ createHostAdapter: () => ({ capabilities: [], resolveAgent: async () => undefined, sessionEvents: () => [], attachSessionToWorkspace: attachFallback }) }));
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
@@ -66,6 +67,7 @@ function fixture() {
 describe('QQ native workbench ownership', () => {
   it('creates a Session in the QQ default directory without requiring a registered workspace', async () => {
     const f = fixture(); const old = await f.current(); const before = f.service.requireEntry(f.key);
+    expect(attachFallback).toHaveBeenCalledWith(old.sessionId, f.root);
     f.workspaces.clear();
     const input = { operationId: 'no-workspace', expectedCurrentSessionId: old.sessionId, expectedPolicyVersion: before.policy.version, workspaceId: '', presetId: 'chosen' };
     const id = await f.service.createSession(f.key, input);

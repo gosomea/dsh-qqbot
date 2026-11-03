@@ -151,3 +151,20 @@ describe('QQ navigation and fixed answer targets', () => {
     expect(openSession).toHaveBeenCalledExactlyOnceWith('session-a-old');
   });
 });
+
+it('keeps the native view until the archived Session is explicitly restored', async () => {
+  let archived = true;
+  const openSession = vi.fn();
+  const restore = vi.fn(async () => { archived = false; });
+  const store = new QQSessionStore({ openSession }, { has: () => archived, restore });
+  store.openSession('past');
+  expect(store.getSnapshot().overlay?.kind).toBe('archived');
+  expect(openSession).not.toHaveBeenCalled();
+  store.closeDrawer();
+  expect(restore).not.toHaveBeenCalled();
+  store.openSession('past');
+  await store.restoreArchived();
+  expect(restore).toHaveBeenCalledExactlyOnceWith('past');
+  expect(openSession).toHaveBeenCalledExactlyOnceWith('past');
+  expect(store.getSnapshot().overlay).toBeNull();
+});

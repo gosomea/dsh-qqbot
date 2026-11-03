@@ -20,7 +20,7 @@ export interface QQOperationTarget {
   readonly workspaceId: string | null; readonly policyVersion: number; readonly presetId: string | null;
 }
 interface QQSessionSelectionOptions { readonly preserveVisibleFilter?: boolean; /** 选中历史会话时是否自动展开该 peer 的全部历史（用户主动点击= true；恢复/程序选中= false）。 */ readonly revealHistory?: boolean }
-type QQOverlay = { readonly kind: 'drawer'; readonly target: QQDrawerTarget } | { readonly kind: 'answer'; readonly preview: QQAnswerPreview } | { readonly kind: 'operation'; readonly target: QQOperationTarget };
+type QQOverlay = { readonly kind: 'archived'; readonly sessionId: string; readonly options: QQSessionSelectionOptions; readonly busy: boolean; readonly error?: string } | { readonly kind: 'drawer'; readonly target: QQDrawerTarget } | { readonly kind: 'answer'; readonly preview: QQAnswerPreview } | { readonly kind: 'operation'; readonly target: QQOperationTarget };
 export type QQScope = ConversationView['scope'];
 export interface QQSidebarState {
   readonly sidebarMode: 'workspace' | 'qq';
@@ -52,7 +52,7 @@ export class QQSessionStore {
   private refreshDirectory: (() => void) | undefined;
   private navigate: ((sessionId: string) => void) | undefined;
   private navigationGeneration = 0;
-  constructor(private readonly navigation: Pick<UiWorkspace, 'openSession'>) {
+  constructor(private readonly navigation: Pick<UiWorkspace, 'openSession'>, private readonly archive?: { has(id: string): boolean; restore(id: string): Promise<void> }) {
     this.state = { ...this.state, sidebar: { ...this.state.sidebar, ...this.loadSidebar() } };
   }
   /** 读取持久化的侧栏浏览态（刷新后保留展开/收起/选中/折叠/搜索）。 */
@@ -82,7 +82,7 @@ export class QQSessionStore {
   setSidebarMode(sidebarMode: QQSidebarState['sidebarMode']): void {
     if (this.state.sidebar.sidebarMode !== sidebarMode) { this.cancelNavigation(); this.updateSidebar({ sidebarMode }); }
   }
-  cancelNavigation(): void { this.navigationGeneration += 1; }
+  cancelNavigation(): void { this.navigationGeneration += 1; if (this.state.overlay?.kind === 'archived') this.update({ overlay: null }); }
   navigationIntent(): QQNavigationIntent {
     const generation = this.navigationGeneration;
     let active = true;
@@ -173,9 +173,28 @@ export class QQSessionStore {
   openSession(sessionId: string, options: QQSessionSelectionOptions = {}): void {
     if (!sessionId) return;
     this.cancelNavigation();
+    if (this.archive?.has(sessionId)) {
+      this.update({ overlay: { kind: 'archived', sessionId, options, busy: false } });
+      return;
+    }
+    if (this.state.overlay?.kind === 'archived') this.update({ overlay: null });
     this.selectSession(sessionId, options);
     if (this.navigate) this.navigate(sessionId);
     else this.navigation.openSession(SessionId(sessionId));
+  }
+  async restoreArchived(): Promise<void> {
+    const target = this.state.overlay;
+    if (target?.kind !== 'archived' || target.busy || !this.archive) return;
+    const intent = this.navigationIntent();
+    this.update({ overlay: { ...target, busy: true } });
+    try {
+      await this.archive.restore(target.sessionId);
+      if (!intent.current()) return;
+      if (this.archive.has(target.sessionId)) throw new Error('会话仍处于归档状态，请刷新后重试。');
+      this.openSession(target.sessionId, target.options);
+    } catch (error) {
+      if (intent.current()) this.update({ overlay: { ...target, busy: false, error: error instanceof Error ? error.message : '取消归档失败' } });
+    }
   }
   openDrawer(entry: ConversationView, tab: QQDrawerTab = 'settings', sessionId = entry.currentSessionId): void {
     this.cancelNavigation();

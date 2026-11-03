@@ -11,6 +11,7 @@ import type { DshAgent } from '../session/types.ts';
 
 /** 日志最小接口 */
 export interface AdapterLogger {
+  debug?(msg: string): void;
   info(msg: string): void;
   warn(msg: string): void;
 }
@@ -24,12 +25,34 @@ export interface HostAdapter {
   globalService(name: string): unknown | undefined;
   /** 通过原生控制器合并并发恢复，避免与默认会话页创建不同 Agent。 */
   resolveAgent(sessionId: string): Promise<DshAgent | undefined>;
+  attachSessionToWorkspace(sessionId: string, cwd: string): Promise<void>;
   /** 探测结果摘要（启动契约检查用） */
   readonly capabilities: string[];
 }
 
+/** 工作区实体最小契约（对齐 dsh-workspace Workspace） */
+export interface WorkspaceLike {
+  readonly path?: string;
+  attachSession(sessionId: string): Promise<void>;
+}
+
+/** workspaceRegistry 服务最小契约（对齐 dsh-workspace WorkspaceRegistry） */
+export interface WorkspaceRegistryLike {
+  /** 获取目录对应的现有工作区；不存在时创建（幂等；路径须已存在且为目录） */
+  create(path: string, title?: string): Promise<WorkspaceLike>;
+}
+
+/** 插件创建的工作区显示名；仅在该 cwd 尚无工作区时生效（幂等 create 不改既有 title） */
+const WORKSPACE_TITLE = 'QQBot';
+
+/** 取出可用的 workspaceRegistry；形态不匹配返回 undefined（dsh-workspace 未挂载时无侧边栏） */
+function workspaceRegistry(ctx: Context): WorkspaceRegistryLike | undefined {
+  const registry = safeGet(ctx, 'workspaceRegistry') as WorkspaceRegistryLike | undefined;
+  return typeof registry?.create === 'function' ? registry : undefined;
+}
+
 /** 模块级函数的动态 import 结果缓存（spec 变量路径绕开本地依赖类型检查） */
-export function createHostAdapter(ctx: Context, _logger?: AdapterLogger): HostAdapter {
+export function createHostAdapter(ctx: Context, logger?: AdapterLogger): HostAdapter {
   const capabilities: string[] = [];
 
   // events 读取路径只有运行时才能确定，sessionEvents 内自适应
@@ -80,6 +103,28 @@ export function createHostAdapter(ctx: Context, _logger?: AdapterLogger): HostAd
       if ('agent' in result) return result.agent;
       if (result.error.code === 'session/not-found') return undefined;
       throw result.error;
+    },
+
+    async attachSessionToWorkspace(sessionId, cwd) {
+      const registry = workspaceRegistry(ctx);
+      if (!registry) {
+        // 未挂载 dsh-workspace（如 headless profile）→ 无侧边栏，属预期降级
+        logger?.debug?.(`host adapter: workspaceRegistry 未挂载，跳过会话 ${sessionId} 的工作区归属`);
+        return;
+      }
+      try {
+        const workspace = await registry.create(cwd, WORKSPACE_TITLE);
+        if (!workspace || typeof workspace.attachSession !== 'function') {
+          // 宿主接口演进：返回对象不含 attachSession → warn 避免静默失效
+          logger?.warn?.(`host adapter: workspaceRegistry.create 返回了无 attachSession 的对象，跳过会话 ${sessionId}`);
+          return;
+        }
+        await workspace.attachSession(sessionId);
+        logger?.debug?.(`host adapter: attached session ${sessionId} to workspace ${workspace.path ?? cwd}`);
+      } catch (err) {
+        // 仅影响侧边栏展示，绝不打断消息处理；但属异常（cwd 不匹配/目录缺失等），warn 留痕
+        logger?.warn?.(`host adapter: workspace attach failed for ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     },
 
     globalService(name) {

@@ -126,7 +126,10 @@ export function apply(ctx: Context): void {
       };
     },
   };
-  const store = new QQSessionStore(ctx.uiWorkspace);
+  const store = new QQSessionStore(ctx.uiWorkspace, {
+    has: id => ctx.workspaces.list.getSnapshot().archivedSessionIds.includes(SessionId(id)),
+    restore: id => ctx.uiWorkspace.unarchiveSession(SessionId(id)),
+  });
   const defaultWorkspaceName = ctx.locale.bind('common')('workspace.defaultName');
   // settings.section slot 不提供 useWorkspaces；直接订阅 workspaces 服务的工作区列表。
   const workspacesSource = (ctx as unknown as { get?: (name: string) => unknown }).get?.('workspaces') as { list?: { getSnapshot(): { items: ReadonlyArray<WorkspaceItem> }; subscribe(listener: () => void): () => void } } | undefined;
