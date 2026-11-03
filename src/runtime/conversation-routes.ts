@@ -6,10 +6,10 @@ import type { WebServerLike } from '../setup/bind-routes.ts';
 import type { ConversationService } from './conversation-service.ts';
 
 
-export function registerConversationRoutes(ctx: Context, service: ConversationService, commands: () => unknown): void {
+export function registerConversationRoutes(ctx: Context, service: ConversationService): void {
   ctx.inject(['webServer'], scoped => {
     const server = scoped.get('webServer') as WebServerLike;
-    const disposers = [server.register({kind:'exact', path: CONVERSATIONS_PATH, handler: async (_req, res) => json(res,200,{ commands: commands() })})];
+    const disposers = [server.register({kind:'exact', path: CONVERSATIONS_PATH, handler: async (_req, res) => json(res,200,{ commands: service.snapshot().commands })})];
     const pairHandler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       try {
         if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return json(res, 403, { error: '跨来源请求被拒绝' });

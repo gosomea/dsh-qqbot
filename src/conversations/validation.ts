@@ -1,6 +1,6 @@
 import Schema from '@deepseek-ai/schemastery';
 import type { ConversationEntry, DeliveryRecord, GroupMessageRecord, RecordingSettings, RoleSettings } from '../shared/conversation-protocol.ts';
-import { validatePolicy } from '../policy/validation.ts';
+import { validatePolicy } from '../policy/index.ts';
 import { validateQQAgentSettings } from '../shared/agent-settings.ts';
 
 const string = () => Schema.string().required();
