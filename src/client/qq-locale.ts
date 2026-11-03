@@ -1,4 +1,3 @@
-import type {} from "@deepseek-ai/dsh-client-locale/client";
 /**
  * QQ 插件界面文案命名空间（唯一来源）。
  *
