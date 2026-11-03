@@ -1,7 +1,7 @@
-import { createElement as h, type ReactNode } from 'react';
+import { createElement as h, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
-
+import type { ConversationView, DeliveryRecord } from '../shared/conversation-protocol.ts';
 import type { RuntimeStateWire } from '../shared/runtime-protocol.ts';
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives';
 import { BindPanelBody, QQ_BOT_LOGO_PATH, useBindState } from './bind-page.ts';
@@ -9,8 +9,8 @@ import { type SelectorSource } from './host-selectors.ts';
 import { QQConversationView } from './qq-conversation-view.ts';
 export { QQConversationView } from './qq-conversation-view.ts';
 import { QQOperationDialog } from './qq-operation-dialog.ts';
-
-import { QQSessionStore, useQQSessionStore } from './qq-session-store.ts';
+import { deliveryExplanation, deliverySummary, passiveReplyFeedback } from './delivery-feedback.ts';
+import { QQSessionStore, useQQSessionStore, type QQAnswerPreview } from './qq-session-store.ts';
 import { PairClaimPanel } from './qq-pairing.ts';
 import { SlashCommandList } from './slash-command-list.ts';
 
@@ -55,6 +55,22 @@ export function QQAccountOwners({ store, t, bound = true }: { store: QQSessionSt
     commands.length > 0 ? h(SlashCommandList, { commands }) : null);
 }
 
+function errorMessage(cause: unknown): string { return cause instanceof Error ? cause.message : '操作失败'; }
+function usePassiveReplyFeedback(passiveReply: ConversationView['passiveReply']): ReturnType<typeof passiveReplyFeedback> {
+  const [now, setNow] = useState(Date.now);
+  const expiresAt = passiveReply?.expiresAt;
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const update = (): void => {
+      const current = Date.now();
+      setNow(current);
+      if (expiresAt !== undefined && expiresAt !== null && expiresAt > current) timer = setTimeout(update, Math.min(1000, expiresAt - current));
+    };
+    update();
+    return () => { if (timer !== undefined) clearTimeout(timer); };
+  }, [expiresAt]);
+  return passiveReplyFeedback(passiveReply, now);
+}
 export function QQConversationOverlay({ store, selectorSource, t, useWorkspaces, useSessions, defaultWorkspaceName }: { store: QQSessionStore; selectorSource: SelectorSource; t: import('./qq-locale.ts').QQTranslate; defaultWorkspaceName: string; useWorkspaces: PropsRuntime<'shell.overlay'>['useWorkspaces']; useSessions?: PropsRuntime<'shell.overlay'>['useSessions'] }): ReactNode {
   const state = useQQSessionStore(store);
   const workspaces = useWorkspaces((snapshot) => snapshot.items);
@@ -72,5 +88,26 @@ export function QQConversationOverlay({ store, selectorSource, t, useWorkspaces,
       children: entry ? h(QQConversationView, { sessionId: target.sessionId, conversationKey: target.key, initialTab: target.tab, store, selectorSource, t, useSessions, useWorkspaces, defaultWorkspaceName }) : h('p', { role: 'alert' }, '此 QQ 对话已不可用，请刷新目录。') });
   }
   if (overlay?.kind === 'operation') return h(QQOperationDialog, { key: `${overlay.target.kind}/${overlay.target.key}`, target: overlay.target, store, selectorSource, workspaces, defaultWorkspaceName });
+  if (overlay?.kind === 'answer') return h(Modal, { key: overlay.preview.operationId, title: `发送到 ${overlay.preview.name}`, open: true, closeLabel: '关闭', className: 'imqq-answerPreview', onClose: store.closePreview, children: h(AnswerPreview, { preview: overlay.preview, store }) });
   return null;
+}
+
+function AnswerPreview({ preview, store }: { preview: QQAnswerPreview; store: QQSessionStore }): ReactNode {
+  useQQSessionStore(store);
+  const replyFeedback = usePassiveReplyFeedback(store.conversation(preview.key)?.passiveReply);
+  const [busy, setBusy] = useState(false);
+  const [delivery, setDelivery] = useState<DeliveryRecord | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const pending = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const valid = store.canSend(preview);
+  return h('div', null, h('p', { className: 'imqc-hint' }, `目标 ${preview.name} · 会话 ${preview.sessionId.slice(-8)}`), h('p', { className: 'imqc-hint' }, replyFeedback.summary), h('p', { className: 'imqc-hint' }, '仅发送以下最终回答。'), h('pre', { className: 'imqc-messageText' }, preview.text),
+    !valid ? h('p', { role: 'alert', className: 'imqc-error' }, '此对话的授权或当前会话已变化，请关闭预览并重新选择回答。') : null,
+    error ? h('p', { role: 'alert', className: 'imqc-error' }, error) : null,
+    delivery ? h('div', { role: 'status' }, h('p', null, deliverySummary(delivery)), h('p', { className: 'imqc-hint' }, deliveryExplanation(delivery)), delivery.error ? h('p', { className: 'imqc-error' }, delivery.error) : null) : null,
+    h(Button, { variant: 'primary', size: 'sm', disabled: busy || !valid || attempted, onClick: () => {
+      if (!store.canSend(preview) || pending.current || attempted) return;
+      pending.current = true; setAttempted(true); setBusy(true); setError(null);
+      void store.sendAnswer(preview).then((result) => { if (result.delivery) setDelivery(result.delivery); else setError('未确认发送结果，请查看发送记录。'); }).catch((cause: unknown) => setError(`发送结果未确认：${errorMessage(cause)}。请查看发送记录并核对 QQ，本次操作不会重发。`)).finally(() => { pending.current = false; setBusy(false); });
+    } }, busy ? '提交中…' : attempted ? '本次发送已提交' : replyFeedback.sendLabel));
 }

@@ -58,13 +58,26 @@ export function registerConversationRoutes(ctx: Context, service: ConversationSe
           } else if (action === 'clear-records') {
             if (!Number.isSafeInteger(body.expectedRecordingVersion) || Number(body.expectedRecordingVersion) !== (service.store.get(key)?.recording?.version ?? 0)) throw new Error('记录设置已更新，请刷新后重试');
             service.clearRecords(key);
+          } else if (action === 'timeline') {
+            for (const name of ['before', 'after', 'snapshot', 'limit']) if (body[name] !== undefined && (!Number.isSafeInteger(body[name]) || Number(body[name]) < 0)) throw new Error('时间线分页参数无效');
+            if (body.query !== undefined && (typeof body.query !== 'string' || body.query.length > 2000)) throw new Error('查询文字无效');
+            result.timeline = service.store.timeline(key, { before: typeof body.before === 'number' ? body.before : undefined, after: typeof body.after === 'number' ? body.after : undefined, snapshot: typeof body.snapshot === 'number' ? body.snapshot : undefined, limit: typeof body.limit === 'number' ? body.limit : undefined, query: typeof body.query === 'string' ? body.query : undefined });
           } else if (action === 'create-session') {
             if (body.expectedCurrentSessionId !== null && typeof body.expectedCurrentSessionId !== 'string') throw new Error('当前会话标识无效');
             if (!Number.isSafeInteger(body.expectedPolicyVersion)) throw new Error('配置版本无效');
             result.sessionId = await service.createSession(key, { operationId: field(body, 'operationId'), expectedCurrentSessionId: body.expectedCurrentSessionId, expectedPolicyVersion: Number(body.expectedPolicyVersion), workspaceId: field(body, 'workspaceId', true), presetId: field(body, 'presetId') });
           } else if (action === 'unarchive') {
             await service.unarchive(key, field(body, 'sessionId'));
-          } else if (action === 'analyze') throw new Error('本地分析已合并到当前聊天，请使用仅网页回复');
+          } else if (action === 'messages') {
+            if (body.before !== undefined && (!Number.isSafeInteger(body.before) || Number(body.before) < 0)) throw new Error('分页位置无效');
+            result.messages = service.store.messages(key, { before: typeof body.before === 'number' ? body.before : undefined, query: typeof body.query === 'string' ? body.query : undefined });
+          } else if (action === 'deliveries') result.deliveries = service.store.deliveries(key);
+          else if (action === 'send') {
+            const source = body.sourceSessionId === undefined && body.sourceMessageId === undefined ? undefined
+              : { sessionId: field(body, 'sourceSessionId'), messageId: field(body, 'sourceMessageId') };
+            result.delivery = await service.send(key, field(body, 'operationId'), field(body, 'text'), source);
+          }
+          else if (action === 'analyze') throw new Error('本地分析已合并到当前聊天，请使用仅网页回复');
           else if (action === 'stop') (await manager.restoreExisting(scope, peerId))?.agent.cancel({ kind: 'user' }, { keepInbox: true });
           else {
             service.assertCurrentSession(key, body.sessionId);

@@ -85,7 +85,9 @@ function PeerRow({ peer, store, t, expanded, showAll, selectedSessionId, onDialo
         items: [{ type: 'label', id: 'current-label', text: '当前会话' },
           { id: 'rename', label: '重命名当前会话…', disabled: !currentSession },
           { id: 'settings', label: '当前会话设置…' },
-        ],onSelect: (id) => {
+          { type: 'separator', id: 'qq-separator' }, { type: 'label', id: 'qq-label', text: entry.scope === 'group' ? 'QQ 群聊' : 'QQ 联系人' },
+          { id: 'messages', label: '消息记录…' }],
+        onSelect: (id) => {
           setMenuOpen(false);
           if (id === 'rename' && currentSession) onDialog({ kind: 'rename', sessionId: currentSession.sessionId, title: currentSession.nativeTitle ?? '' });
           else store.openDrawer(entry, id === 'messages' ? 'messages' : 'settings');
