@@ -257,3 +257,5 @@ npx @deepseek-ai/dsh web --patch /path/to/dsh-qqbot/cordis.dev.yml
 [MIT](./LICENSE)
 
 QQ 群聊和私聊的补充提示词按当前 Agent 作用域加载，恢复会话时继续使用对应场景的配置。
+
+QQ 斜杠命令由全局超管使用。在绑定账号的设置页添加超管；群和私聊仍分别受接入白名单约束。命令列表和手机帮助使用同一份注册表。移除超管后，重启不会从旧白名单重新授予身份。
