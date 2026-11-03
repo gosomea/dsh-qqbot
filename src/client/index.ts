@@ -16,6 +16,16 @@ import type { Context } from '@deepseek-ai/cordis';
 import { createElement, type ReactNode } from 'react';
 import { BIND_STATE_PATH } from '../shared/bind-protocol.ts';
 import { BindPanelBody, useBindState, QQ_BOT_LOGO_PATH, installPanelStyles } from './bind-page.ts';
+import { PairClaimPanel } from './qq-pairing.ts';
+import { SlashCommandList } from './slash-command-list.ts';
+import { CONVERSATIONS_PATH, type SlashCommandDescriptor } from '../shared/conversation-protocol.ts';
+import { fetchJson } from './http.ts';
+import { useEffect, useState } from 'react';
+function OwnerPanel() {
+  const [commands, set] = useState<SlashCommandDescriptor[]>([]);
+  useEffect(() => { let live=true; void fetchJson<{commands:SlashCommandDescriptor[]}>(CONVERSATIONS_PATH).then(r=>{if(live)set(r.commands)}).catch(()=>{}); return ()=>{live=false} }, []);
+  return createElement('section', null, createElement(PairClaimPanel,{purpose:'owner', title:'斜杠命令超管'}),createElement(SlashCommandList,{commands}));
+}
 import { ConfigPanel } from './config-panel.ts';
 
 export const name = 'im-qqbot-client';
@@ -83,8 +93,9 @@ function BindGuideIcon(): ReactNode {
 function QQBotSettingsSection(): ReactNode {
   const { state, gone, recheck } = useBindState();
   return createElement('div', null,
-    createElement<NonNullable<Parameters<typeof BindPanelBody>[0]>>(BindPanelBody, { state, gone, recheck }),
-    createElement<NonNullable<Parameters<typeof ConfigPanel>[0]>>(ConfigPanel, { bindPhase: state?.phase }),
+    createElement(BindPanelBody, { state, gone, recheck }),
+    createElement(ConfigPanel, { bindPhase: state?.phase }),
+    state?.phase === "bound" ? createElement(OwnerPanel) : null,
   );
 }
 
