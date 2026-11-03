@@ -10,6 +10,7 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 import { installQQConversationViewRegistration } from './qq-conversation-registration.ts';
 import { conversationName } from './conversation-state.ts';
 import { installConversationStyles } from './conversation-styles.ts';
+import { installQQToolScopeControl } from './qq-tool-scope-control.ts';
 import { QQConversationView, QQConversationOverlay } from './conversation-panel.ts';
 import { QQSessionStore, useQQSessionStore } from './qq-session-store.ts';
 import type { SelectorSource } from './host-selectors.ts';
@@ -40,5 +41,6 @@ export function installNativeQQConversation(ctx: Context, store: QQSessionStore,
     }));
     return stopSeat;
   });
+  ctx.slots.inject('conversation.input.permission', () => installQQToolScopeControl({ slots: ctx.slots, store }));
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'qqbot-conversation' }, (props: PropsRuntime<'shell.overlay'>) => h(QQConversationOverlay, { store, selectorSource, t, useWorkspaces: props.useWorkspaces, useSessions: props.useSessions, defaultWorkspaceName: ctx.locale.bind('common')('workspace.defaultName') })));
 }

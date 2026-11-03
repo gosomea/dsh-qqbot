@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Context } from '@deepseek-ai/cordis';
 import type { AssembleContext, PromptContext, PromptSection, SystemPrompt } from '@deepseek-ai/dsh-system-prompt';
 import { installQQPrompt, turnMetaText, type QQPromptEntry, type QQTurnContext } from '../prompt/index.ts';
-import { EXTRA_MAX_CHARS as QQ_EXTRA_PROMPT_MAX_CHARS } from './extra.ts';
+import { QQ_EXTRA_PROMPT_MAX_CHARS } from '../shared/agent-settings.ts';
 
 function fakeSystemPrompt() {
   const sections = new Map<string, PromptSection>();
@@ -24,10 +24,10 @@ function entry(o: Partial<QQPromptEntry> = {}): QQPromptEntry {
 }
 
 describe('installQQPrompt (DSH section/context 注册)', () => {
-  it('registers 4 sections + 2 contexts; dispose clears', () => {
+  it('registers 5 sections + 2 contexts; dispose clears', () => {
     const sp = fakeSystemPrompt();
     const h = installQQPrompt(sp.ctx, entry());
-    expect([...sp.sections.keys()].sort()).toEqual(['qqbot:extra', 'qqbot:persona', 'qqbot:rules', 'qqbot:scope']);
+    expect([...sp.sections.keys()].sort()).toEqual(['qqbot:extra', 'qqbot:persona', 'qqbot:rules', 'qqbot:scope', 'qqbot:tool-availability']);
     expect([...sp.contexts.keys()]).toEqual(['qqbot:turn-meta', 'qqbot:background']);
     h.dispose();
     expect(sp.sections.size).toBe(0); expect(sp.contexts.size).toBe(0);

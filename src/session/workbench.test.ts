@@ -159,6 +159,18 @@ describe('QQ native workbench ownership', () => {
     expect(f.create.mock.calls.at(-1)?.[0].meta?.agentPreset).toBe('standard');
     expect(f.service.requireEntry(f.key).settings).toEqual(before.settings);
   });
+  it('keeps a saved next-session cwd when the current Session is attached again', async () => {
+    const f = fixture(); const old = await f.current(); const before = f.service.requireEntry(f.key);
+    const pendingCwd = join(f.root, 'pending-workspace');
+    await f.service.saveSettings(f.key, before.policy.version, { ...before.settings!, cwd: pendingCwd }, before.alias, before.policy.receiveEnabled !== false);
+    expect(old.agent.session.header?.cwd).toBe(f.root);
+    f.service.attach(old);
+    expect(f.service.requireEntry(f.key).settings?.cwd).toBe(pendingCwd);
+    expect(new ConversationStore(f.root, 'fixture').get(f.key)?.settings?.cwd).toBe(pendingCwd);
+    expect(f.service.requireEntry(f.key).currentSessionId).toBe(old.sessionId);
+    await f.manager.remove('group', 'g');
+    expect(f.create.mock.calls.at(-1)?.[0].meta?.cwd).toBe(pendingCwd);
+  });
   it('shows actual permission conflicts without downgrading and unarchives only an explicitly matched current Session', async () => {
     const f = fixture(); const record = await f.current();
     f.selected.set(record.sessionId, 'danger-full-access');
@@ -230,5 +242,29 @@ describe('QQ native workbench ownership', () => {
     f.service.updatePolicy(f.key, revoked.policy.version, { ...revoked.policy, receiveEnabled: false }, '');
     const message = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'QQ input after revocation' }] });
     await expect(f.service.enqueueQQ(record, message, { messageId: 'msg', senderId: 'actor' }, 0, [])).rejects.toThrow('停止回复');
+  });
+  it('does not roll back a concurrent revocation when native Session creation fails', async () => {
+    const f = fixture(); await f.current();
+    let enter!: () => void; let fail!: () => void;
+    const entered = new Promise<void>(resolve => { enter = resolve; });
+    const gate = new Promise<void>(resolve => { fail = resolve; });
+    vi.spyOn(f.manager, 'replaceSession').mockImplementation(async () => { enter(); await gate; throw new Error('creation failed'); });
+    const entry = f.service.requireEntry(f.key);
+    const save = f.service.savePolicy(f.key, entry.policy.version, { ...entry.policy, toolMode: 'native', tools: { read: 'allow' } }, '');
+    await entered;
+    const concurrent = f.service.requireEntry(f.key);
+    f.service.updatePolicy(f.key, concurrent.policy.version, { ...concurrent.policy, tools: { read: 'deny' }, receiveEnabled: false }, 'revoked');
+    fail(); await expect(save).rejects.toThrow('creation failed');
+    expect(f.service.requireEntry(f.key)).toMatchObject({ alias: 'revoked', policy: { tools: { read: 'deny' }, receiveEnabled: false } });
+  });
+  it('rejects stale UI controls, and native capability mode starts a new Agent without replacing its executor', async () => {
+    const f = fixture(); const old = await f.current();
+    const p = f.service.requireEntry(f.key).policy;
+    const callsBefore = f.tools.setExecutor.mock.calls.length;
+    await f.service.savePolicy(f.key, p.version, { ...p, toolMode: 'native', tools: { read: 'allow' } }, '');
+    expect(f.service.requireEntry(f.key).currentSessionId).not.toBe(old.sessionId);
+    expect(f.tools.setExecutor.mock.calls.length).toBe(callsBefore);
+    expect(() => f.service.assertCurrentSession(f.key, old.sessionId)).toThrow('已更新');
+    expect(f.service.requireEntry(f.key).policy.tools).toEqual({ read: 'allow' });
   });
 });
