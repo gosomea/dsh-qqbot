@@ -363,6 +363,25 @@ describe('native QQ turn delivery', () => {
     await f.service.observeSessionEvent(f.session.id, 'turn/end', { turn: 1, reason: { kind: 'completed' } });
     expect(f.sendMarkdown).not.toHaveBeenCalled();
   });
+
+  it('does not retry an explicit send with unknown delivery after restart', async () => {
+    const f = fixture(); f.sendMarkdown.mockRejectedValueOnce(new Error('Connection lost after submission'));
+    const delivery = await f.service.send(f.record.sessionKey, 'manual-1', 'Explicit conclusion');
+    expect(delivery.state).toBe('unknown');
+    expect((await f.service.send(f.record.sessionKey, 'manual-1', 'Explicit conclusion')).state).toBe('unknown');
+    const restored = f.restart();
+    expect((await restored.send(f.record.sessionKey, 'manual-1', 'Explicit conclusion')).state).toBe('unknown');
+    expect(f.sendMarkdown.mock.calls).toEqual([[{ scope: 'group', targetId: 'g' }, 'Explicit conclusion']]);
+    expect(restored.store.snapshotBackground(f.record.sessionKey, '').text).toBe('');
+  });
+
+  it('records an accepted explicit send once without adding it to group background', async () => {
+    const f = fixture();
+    expect((await f.service.send(f.record.sessionKey, 'manual-1', 'Explicit conclusion')).state).toBe('accepted');
+    await f.service.send(f.record.sessionKey, 'manual-1', 'Explicit conclusion');
+    expect(f.sendMarkdown).toHaveBeenCalledTimes(1);
+    expect(f.service.store.snapshotBackground(f.record.sessionKey, '').text).toBe('');
+  });
 });
 
 describe('channel membership and ownership', () => {
@@ -413,6 +432,63 @@ describe('revocation classification', () => {
     expect(isReduction(old, broader)).toBe(false);
   });
 });
+
+describe('manual QQ reply sources and visible failures', () => {
+  it('guards forwarded model answers while preserving explicitly entered manual text', async () => {
+    const f = fixture();
+    const text = '<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name="web_fetch">https://example.com</｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>';
+    const message = answer(f, text);
+    f.services.sessionController = { resolveAgent: async () => f.record.agent };
+    await f.service.send(f.record.sessionKey, 'forwarded-protocol', text, { sessionId: f.session.id, messageId: message.id });
+    expect(f.sendMarkdown.mock.calls[0]?.[1]).toBe(UNEXECUTED_TOOL_REQUEST_NOTICE);
+    await f.service.send(f.record.sessionKey, 'manual-protocol-example', text);
+    expect(f.sendMarkdown.mock.calls[1]?.[1]).toBe(text);
+  });
+  it('redacts bare configured credentials from explicit-send errors and logger output while retaining platform evidence', async () => {
+    const { ApiError } = await import('@tencent-connect/qqbot-nodejs');
+    const f = fixture(); f.config.appSecret = 'bare-configured-secret';
+    f.sendMarkdown.mockRejectedValueOnce(new ApiError('ignored', 400, '/private', 40034105, 'bare-configured-secret denied'));
+    const record = await f.service.send(f.record.sessionKey, 'manual-secret-rejection', 'conclusion');
+    expect(record.state).toBe('failed'); expect(record.error).toContain('HTTP 400'); expect(record.error).toContain('40034105');
+    expect(JSON.stringify(record)).not.toContain('bare-configured-secret');
+    expect(JSON.stringify(f.logger.warn.mock.calls)).not.toContain('bare-configured-secret');
+  });
+
+  afterEach(() => { vi.useRealTimers(); });
+  it('uses the latest live passive source instead of forcing a proactive send', async () => {
+    vi.useFakeTimers({ now: 0 });
+    const { cacheMsgId } = await import('../transport/msgid-cache.ts');
+    cacheMsgId('group', 'g', 'manual-live-id');
+    const f = fixture();
+    await f.service.send(f.record.sessionKey, 'manual-live', 'conclusion');
+    expect(f.sendMarkdown).toHaveBeenCalledWith({ scope: 'group', targetId: 'g', msgId: 'manual-live-id' }, 'conclusion');
+  });
+  it('preserves an explicit permission rejection through restart and never repeats the same operation', async () => {
+    const { ApiError } = await import('@tencent-connect/qqbot-nodejs');
+    const f = fixture();
+    f.sendMarkdown.mockRejectedValueOnce(new ApiError('API failed', 400, '/messages', 40034105, '主动消息失败, 无权限'));
+    const record = await f.service.send(f.record.sessionKey, 'manual-denied', 'conclusion');
+    expect(record.state).toBe('failed'); expect(record.error).toContain('40034105'); expect(record.error).toContain('无权限');
+    const restored = f.restart();
+    expect(await restored.send(f.record.sessionKey, 'manual-denied', 'conclusion')).toEqual(record);
+    expect(f.sendMarkdown).toHaveBeenCalledTimes(1);
+  });
+  it('freezes the selected passive source across parts and stops when that source expires', async () => {
+    vi.useFakeTimers({ now: 0 });
+    const { cacheMsgId } = await import('../transport/msgid-cache.ts');
+    cacheMsgId('group', 'g', 'manual-expiring-id');
+    const f = fixture(); f.config.textChunkLimit = 100;
+    f.sendMarkdown.mockImplementationOnce(async () => {
+      vi.advanceTimersByTime(300001);
+      cacheMsgId('group', 'g', 'newer-source-not-authorized-for-this-send');
+    });
+    const record = await f.service.send(f.record.sessionKey, 'manual-expiring', Array.from({ length: 3 }, () => 'x'.repeat(90)).join('\n'));
+    expect(f.sendMarkdown).toHaveBeenCalledTimes(1);
+    expect(record.state).toBe('failed'); expect(record.error).toContain('窗口已过期');
+    expect(record.parts[0]?.state).toBe('accepted'); expect(record.parts[1]?.state).toBe('failed');
+  });
+});
+
 
 describe('pairing-code claim (two-phase)', () => {
   it('issues a code, startClaim returns a nonce without writing, applyClaim commits the owner', () => {
