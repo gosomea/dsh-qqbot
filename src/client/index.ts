@@ -27,7 +27,7 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
 }
 
 export const name = 'im-qqbot-client';
-export const inject = ['slots', 'remote', 'remote.session', 'remote.workspace', 'remote.agentPresets', 'remote.permissionPresets', 'locale', 'uiWorkspace'];
+export const inject = ['slots', 'remote', 'remote.session', 'remote.workspace', 'remote.agentPresets', 'remote.permissionPresets', 'locale', 'uiWorkspace', 'workspaces'];
 
 /** 本插件包名（插件详情页按其匹配来源包，只在对应详情页渲染操作按钮） */
 const PACKAGE_NAME = '@tencent-connect/dsh-qqbot';
