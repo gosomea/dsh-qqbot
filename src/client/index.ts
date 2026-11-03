@@ -9,7 +9,7 @@ import { createElement, useEffect, useState, useSyncExternalStore, type ReactNod
 import { SessionId } from '@deepseek-ai/dsh-session/types';
 import { BindPanelBody, useBindState, QQ_BOT_LOGO_PATH, installPanelStyles } from './bind-page.ts';
 import { ConfigPanel } from './config-panel.ts';
-
+import { QQDefaultsSettings } from './qq-defaults-settings.ts';
 import { ConversationPanel, QQAccountOwners } from './conversation-panel.ts';
 import { installNativeQQConversation } from './conversation-native.ts';
 import { QQSessionStore } from './qq-session-store.ts';
@@ -44,7 +44,7 @@ type WorkspaceItem = { workspaceId: string; title: string; path: string };
 const EMPTY_WORKSPACES: ReadonlyArray<WorkspaceItem> = [];
 
 /** 设置页栏目：共享一份绑定状态轮询，驱动绑定面板与配置刷新 */
-function QQBotSettingsSection({ selectorSource, store, t }: { selectorSource: SelectorSource; store: QQSessionStore; t: QQTranslate; workspaces: ReadonlyArray<WorkspaceItem>; defaultWorkspaceName: string }): ReactNode {
+function QQBotSettingsSection({ selectorSource, store, t, workspaces, defaultWorkspaceName }: { selectorSource: SelectorSource; store: QQSessionStore; t: QQTranslate; workspaces: ReadonlyArray<WorkspaceItem>; defaultWorkspaceName: string }): ReactNode {
   const { state, gone, error, recheck } = useBindState();
   // 单页两卡：账号与访问（凭据 / 服务范围 / 所有者，均"保存即重载插件"）与新对话默认值（版本化即时生效）。
   return createElement('div', { className: 'imqb-cards' },
@@ -54,6 +54,8 @@ function QQBotSettingsSection({ selectorSource, store, t }: { selectorSource: Se
       createElement(BindPanelBody, { state, gone, error, recheck }),
       createElement(ConfigPanel, { bindPhase: state?.phase, selectorSource, t }),
       createElement(QQAccountOwners, { store, t, bound: state?.phase === 'bound' })),
+    createElement('section', { className: 'imqb-card', 'aria-label': '新对话默认值' },
+      createElement(QQDefaultsSettings, { store, selectorSource, t, workspaces, defaultWorkspaceName })),
   );
 }
 
