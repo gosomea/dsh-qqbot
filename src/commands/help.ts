@@ -2,7 +2,7 @@
  * /bot-help — 查看所有指令，按「通用能力 / QQ 机器人特有」分组展示
  *
  * 通用能力：对应底层 dsh agent 能力（new/compact/model/stop），无前缀
- * QQBot 特有：插件自身封装（bot-ping/bot-version/bot-status/bot-help），带 bot- 前缀
+ * QQBot 特有：插件自身封装（bot-ping/bot-version/bot-me/bot-status/bot-help），带 bot- 前缀
  */
 import type { CommandDeps, CategorizedCommand } from './types.ts';
 import { sendMarkdownChunked, PLUGIN_VERSION } from '../shared/index.ts';
@@ -15,6 +15,7 @@ export function helpCommand(
   return {
     name: 'bot-help',
     category: 'qqbot',
+    authority: 'query',
     scope: 'all',
     description: '查看所有指令',
     handler: async (cmdCtx) => {
@@ -35,7 +36,7 @@ export function helpCommand(
         return out;
       };
 
-      const lines: string[] = ['### 🤖 QQ 机器人指令', ''];
+      const lines: string[] = ['### 🤖 QQ 机器人指令', '', '斜杠命令仅机器人超管可用。', ''];
 
       if (agentCmds.length > 0) {
         lines.push('**通用能力**', '', ...render(agentCmds), '');
@@ -44,7 +45,11 @@ export function helpCommand(
         lines.push('**插件内置指令**', '', ...render(qqbotCmds), '');
       }
 
-      lines.push('', `> dsh-qqbot v${PLUGIN_VERSION}`);
+      lines.push('', '**默认值与会话覆盖**',
+        '模型与新会话预设：QQ 命令覆盖 > QQ 网页默认 > DSH 默认。',
+        '`/model reset` 恢复网页默认模型，保留上下文；`/preset reset` 恢复获授权的网页默认预设并开始新会话，不携带旧上下文，原会话历史和工作区保留。',
+        '`/new`（同 `/reset`、`/clear`）开始新会话，保留会话覆盖；`/compact` 保留会话并压缩历史。',
+        '', `> dsh-qqbot v${PLUGIN_VERSION}`);
       await sendMarkdownChunked(cmdCtx, lines.join('\n'), config.textChunkLimit);
       return { kind: 'noop' as const };
     },
