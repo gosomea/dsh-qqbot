@@ -31,7 +31,7 @@ import { chunkMarkdownText } from '../transport/chunker.ts';
 
 import { getCachedReplySources } from '../transport/msgid-cache.ts';
 import { OperationRetention } from './operation-retention.ts';
-
+import { SessionOperations } from './session-operations.ts';
 import { redactRecordingText } from './recording-redaction.ts';
 import { deliveryFailure, DeliveryNotSubmittedError } from './delivery-error.ts';
 import { defaultQQAgentSettings, type QQAgentSettings } from '../shared/agent-settings.ts';
@@ -47,7 +47,7 @@ export class ConversationService {
   readonly queue = new ConversationQueue();
   readonly ingestion = new ConversationIngressQueue();
   readonly operations: QQOperations;
-  
+  private readonly sessionOperations: SessionOperations;
   private readonly operationRetention = new OperationRetention();
   private readonly outboundContext = new AsyncLocalStorage<{ provenance: 'command' | 'interaction' | 'sdk'; sourceMessageId?: string }>();
   private readonly outboundTracking = new AsyncLocalStorage<boolean>();
@@ -86,7 +86,7 @@ export class ConversationService {
   constructor(readonly ctx: Context, readonly manager: SessionManager, readonly config: ImQQBotConfig, readonly logger: Logger, dataDir = PLUGIN_HOME) {
     const operationDir = join(dataDir, `operations-${createHash('sha256').update(config.appId).digest('hex')}`);
     this.operations = new QQOperations(operationDir);
-    
+    this.sessionOperations = new SessionOperations(operationDir);
     this.store = new ConversationStore(dataDir, config.appId, { legacyOwnerIds: () => config.access.c2cMode === 'allowlist' ? config.access.c2cAllow : [], defaultPolicy: () => {
       const policy = defaultPolicy('chat', resolveAgentCwd(config.cwd));
       policy.requireMention = config.requireMention;
@@ -111,12 +111,20 @@ export class ConversationService {
       return undefined;
     }, { global: true, prepend: true });
   }
-  async activityRecord(key: string, sender: string, target: ReplyTarget, _withinQueue = false): Promise<SessionRecord> {
+  async activityRecord(key: string, sender: string, target: ReplyTarget, withinQueue = false): Promise<SessionRecord> {
     return this.ingestion.run(key, async () => {
       let entry = this.requireEntry(key);
       this.assertNotArchived(entry);
       let record = await this.manager.getOrCreate(entry.scope, entry.peerId, sender, target);
       entry = this.requireEntry(key);
+      const row = entry.sessions.find(item => item.sessionId === record.sessionId);
+      const count = row?.receivedMessages ?? 0;
+      const policy = entry.lifecycle;
+      const due = policy && ((policy.rotateDays > 0 && Date.now() - (row?.startedAt ?? Date.now()) >= policy.rotateDays * 86_400_000) || (policy.maxMessages > 0 && count >= policy.maxMessages));
+      if (due && !this.reservations.get(key) && (withinQueue || this.queue.pending(key) === 0) && record.agent.status !== 'running' && !record.agent.inbox?.nextTurn.length && !record.agent.inbox?.nextStep.length) {
+        await this.manager.remove(entry.scope, entry.peerId);
+        record = await this.manager.getOrCreate(entry.scope, entry.peerId, sender, target);
+      }
       await this.reconcileBackground(record);
       return record;
     });
@@ -545,8 +553,58 @@ export class ConversationService {
     });
     if (entry.settings) this.store.updateSettings(key, entry.policy.version, { ...entry.settings, execution: { ...entry.settings.execution, permission: permissionSandbox(value) ?? entry.settings.execution.permission } }, entry.alias, entry.policy.receiveEnabled !== false);
   }
+  async selectWorkspace(key: string, id: string): Promise<SessionRecord> {
+    const entry = this.requireEntry(key);
+    if (this.busy(key)) throw new Error('会话正在生成，请先停止');
+    this.resolveWorkspace(id);
+    return this.queue.run(key, () => this.ingestion.run(key, async () => {
+      this.assertCommandAuthority(entry.scope, entry.peerId);
+      if (entry.workspaceId === id) {
+        const current = await this.manager.restoreExisting(entry.scope, entry.peerId);
+        if (current) return current;
+      }
+      return this.manager.replaceSession(entry.scope, entry.peerId, id);
+    }));
+  }
+  async createSession(key: string, input: { operationId: string; expectedCurrentSessionId: string | null; expectedPolicyVersion: number; workspaceId: string; presetId: string }): Promise<string> {
+    return this.queue.run(key, () => this.ingestion.run(key, async () => {
+      const replay = this.sessionOperations.begin(input.operationId, { key, ...input });
+      if (replay) return replay;
+      let committed: string | undefined;
+      try {
+        const assertCurrent = (): void => {
+          const entry = this.requireEntry(key);
+          if (entry.currentSessionId !== input.expectedCurrentSessionId || entry.policy.version !== input.expectedPolicyVersion) throw new Error('当前会话或配置版本已更新，请刷新后重试');
+          this.assertCommandAuthority(entry.scope, entry.peerId);
+          const live = entry.currentSessionId ? this.ctx.get('agents')?.get(SessionId(entry.currentSessionId)) : undefined;
+          if (live?.status === 'running' || live?.inbox.nextTurn.length || live?.inbox.nextStep.length || (this.reservations.get(key) ?? 0) > 0) throw new Error('会话正在生成或排队，请停止后重试');
+          this.validateSelection(entry.scope, entry.peerId, 'preset', input.presetId);
+          if (input.workspaceId !== '') this.resolveWorkspace(input.workspaceId);
+        };
+        assertCurrent();
+        const entry = this.requireEntry(key);
+        const record = await this.manager.replaceSession(entry.scope, entry.peerId, input.workspaceId || null, { presetId: input.presetId, assertCurrent });
+        committed = record.sessionId;
+        this.sessionOperations.complete(input.operationId, record.sessionId);
+        return record.sessionId;
+      } catch (error) {
+        // A committed mapping is authoritative even if the operation receipt failed.
+        if (committed) return committed;
+        this.sessionOperations.fail(input.operationId, error instanceof Error ? error.message : '创建失败');
+        throw error;
+      }
+    }));
+  }
   private isArchived(entry: ConversationEntry): boolean { return !!entry.currentSessionId && !!this.ctx.get('workspaceRegistry')?.archivedSessionIds?.includes(SessionId(entry.currentSessionId)); }
   private assertNotArchived(entry: ConversationEntry): void { if (this.isArchived(entry)) throw new Error('当前 QQ 会话已归档，请在网页明确恢复后再发送消息；此消息未自动重投'); }
+  async unarchive(key: string, sessionId: string): Promise<void> {
+    const entry = this.requireEntry(key);
+    if (!sessionId || entry.currentSessionId !== sessionId) throw new Error('当前会话已更新，请刷新后明确选择要恢复的会话');
+    const registry = this.ctx.get('workspaceRegistry');
+    if (!registry) throw new Error('工作区服务不可用');
+    this.assertCommandAuthority(entry.scope, entry.peerId);
+    await registry.unarchiveSession(SessionId(sessionId));
+  }
   private persistedPermission(events: readonly { type: string; data?: unknown }[]): string | null {
     for (const event of [...events].reverse()) {
       if (event.type !== 'permission/preset' || !event.data || typeof event.data !== 'object' || !('preset' in event.data)) continue;
