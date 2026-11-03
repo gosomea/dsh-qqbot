@@ -8,13 +8,16 @@ import type {} from '@deepseek-ai/dsh-permission-presets/types';
 import type { SelectorSource } from './host-selectors.ts';
 import type { QQTranslate } from './qq-locale.ts';
 import { QQSessionStore, useQQSessionStore, type QQDrawerTab } from './qq-session-store.ts';
+import { QQPeerSettings } from './qq-peer-settings.ts';
 import { conversationName } from './conversation-state.ts';
 
-export function QQConversationView({ sessionId, store, t, useSessions, useProjection, conversationKey, initialTab }: {
+export function QQConversationView({ sessionId, store, selectorSource, t, useSessions, useWorkspaces, useProjection, conversationKey, initialTab, defaultWorkspaceName }: {
   sessionId: string | null; store: QQSessionStore; selectorSource: SelectorSource; t: QQTranslate; conversationKey?: string; initialTab?: QQDrawerTab;
   useSessions?: PropsRuntime<'conversation.view'>['useSessions']; useWorkspaces?: PropsRuntime<'conversation.view'>['useWorkspaces']; useProjection?: PropsRuntime<'conversation.view'>['useProjection']; defaultWorkspaceName?: string;
 }): ReactNode {
   const state = useQQSessionStore(store);
+  const workspaceItems = useWorkspaces?.(snapshot => snapshot.items) ?? [];
+  const workspaceChoices = workspaceItems.map(item => ({ workspaceId: String(item.workspaceId), title: item.title, path: item.path }));
   const summaries = useSessions?.(snapshot => snapshot.byId) ?? {};
   const projectedPreset = useProjection?.('agentPreset');
   const projectedPermissions = useProjection?.('permissions');
@@ -63,5 +66,5 @@ export function QQConversationView({ sessionId, store, t, useSessions, useProjec
           entry.archived ? h('div', { className: 'imqc-banner', role: 'status' }, h('strong', null, '当前 QQ 会话已归档'), h('p', null, '取消归档后继续接收，或新建会话。'),
             h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => setUnarchive(true) }, '取消归档继续…'),
             unarchive ? h('div', { className: 'imqc-actions' }, h('p', null, '确认取消归档并让 QQ 消息继续进入此会话？'), h(Button, { variant: 'primary', size: 'sm', disabled: busy, onClick: restore }, '确认取消归档'), h(Button, { variant: 'ghost', size: 'sm', disabled: busy, onClick: () => setUnarchive(false) }, '取消')) : null) : null,
-          h(Button, {variant:'outline', size:'sm', disabled: !entry.admitted || entry.running, onClick:()=>store.openOperation(entry)}, '新建 QQ 会话'))));
+          h(QQPeerSettings, { key: entry.key, entry, store, tools: state.directory?.tools ?? [], selectorSource, t, workspaces: workspaceChoices, defaultWorkspaceName, defaultCwd: state.directory?.defaultCwd }))));
 }
