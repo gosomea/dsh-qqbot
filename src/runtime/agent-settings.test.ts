@@ -1,0 +1,281 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { Context } from '@deepseek-ai/cordis';
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm';
+import { Session, SessionId } from '@deepseek-ai/dsh-session';
+import { setSandboxMode, type SandboxMode } from '@deepseek-ai/dsh-sandbox-policy';
+import { setApprovalPolicy, type ApprovalPolicy } from '@deepseek-ai/dsh-user-approval';
+import { ConfigSchema } from '../config.ts';
+import type { SessionManager } from '../session/session-manager.ts';
+import type { SessionRecord } from '../session/types.ts';
+import type { ModelRoute } from '../model/types.ts';
+import { QQ_EXTRA_PROMPT_MAX_CHARS } from '../shared/agent-settings.ts';
+import { ConversationService } from './conversation-service.ts';
+
+const roots: string[] = [];
+afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+function fixture() {
+  const root = mkdtempSync(join(tmpdir(), 'qq-live-settings-')); roots.push(root);
+  const session = Session.create(SessionId('current'));
+  let route: ModelRoute = { provider: 'p', model: 'old' };
+  let current: SessionRecord | undefined;
+  const services: Record<string, unknown> = {};
+  const tools = { definitions: () => [{ name: 'read' }], restrict: () => () => {}, guard: () => () => {} };
+  const ctx = { on: () => () => {}, get: (name: string) => name === 'tools' ? tools : name === 'sessions' ? services.sessions ?? { get: () => session } : name === 'agents' ? { get: () => current?.agent } : services[name] } as unknown as Context;
+  const config = ConfigSchema({ appId: 'settings', appSecret: 'dummy', cwd: root, groupPrompt: 'old scope', access: { groupMode: 'open', c2cMode: 'open' } });
+  const manager = { getDefaultModel: () => ({ provider: 'p', model: 'old' }), getDefaultPreset: () => 'standard', getEffectiveModel: () => route,
+    getStatus: () => ({ active: !!current, preset: 'standard', nextPreset: 'chosen' }), findBySessionId: () => current, getSessionRecord: () => current,
+    restoreExisting: async () => current, validateModelSetting: async (value: typeof route) => value, listPresets: async () => [{ id: 'standard' }, { id: 'chosen' }],
+  } as unknown as SessionManager;
+  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+  const service = new ConversationService(ctx, manager, config, logger, root); manager.conversations = service;
+  const entry = service.entry('group', 'g');
+  const select = vi.fn((value: typeof route) => { route = value; });
+  const agent = { id: session.id, session, ctx, status: 'idle' as const, model: { current: () => route, select }, inbox: { nextTurn: [], nextStep: [] }, cancel: vi.fn(), followup: vi.fn(), whenIdle: async () => {}, runMaintenance: async <T>(task: (signal: AbortSignal) => Promise<T>) => task(new AbortController().signal) };
+  current = { sessionKey: entry.key, sessionId: session.id, scope: 'group', peerId: 'g', senderId: 'actor', replyTarget: { scope: 'group', targetId: 'g' }, lastActivity: Date.now(), agent, handle: { agent, dispose: async () => {} } };
+  service.attach(current);
+  const failCatalogSave = () => {
+    const name = readdirSync(root).find(value => value.startsWith('conversations-') && value.endsWith('.json'));
+    if (!name) throw new Error('Conversation catalog missing');
+    const path = join(root, name);
+    renameSync(path, `${path}.original`);
+    mkdirSync(path);
+  };
+  return { service, key: entry.key, agent, select, session, manager, config, services, failCatalogSave };
+}
+
+describe('idle per-peer Agent settings', () => {
+  function peerFixture() {
+    const f = fixture();
+    let permission = 'workspace-write';
+    const set = vi.fn((_session: Session, value: string) => { permission = value; });
+    f.services.permissionPresets = { current: () => permission, set,
+      catalog: () => ({ options: ['read-only', 'workspace-write', 'danger-full-access'].map(value => ({ value })) }) };
+    f.services.sandboxPolicy = { resolve: () => ({ mode: permission }) };
+    return { ...f, set, permission: () => permission, changeNative: (value: string) => { permission = value; } };
+  }
+  it('patches QQ-only fields without overwriting native model, preset, cwd or permission', async () => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    await f.service.savePeerSettings(f.key, before.policy.version, { promptGroup: 'updated QQ prompt', alias: 'new alias' });
+    const next = f.service.requireEntry(f.key);
+    expect(next.settings).toMatchObject({ model: before.settings!.model, preset: before.settings!.preset, cwd: before.settings!.cwd,
+      promptGroup: 'updated QQ prompt', execution: { kind: 'native', permission: 'workspace-write' } });
+    expect(f.permission()).toBe('workspace-write'); expect(f.set).not.toHaveBeenCalled(); expect(f.select).not.toHaveBeenCalled();
+  });
+  it('saves the first cold-session QQ edit against the restored native permission', async () => {
+    const f = peerFixture();
+    let loaded = false;
+    f.services.sessions = { get: () => loaded ? f.session : undefined };
+    f.manager.restoreExisting = async () => { loaded = true; return f.manager.getSessionRecord('group', 'g'); };
+    const before = f.service.requireEntry(f.key);
+    await f.service.savePeerSettings(f.key, before.policy.version, { alias: 'first edit', promptGroup: 'first prompt' });
+    expect(f.service.requireEntry(f.key)).toMatchObject({ alias: 'first edit', currentSessionId: f.session.id,
+      settings: { promptGroup: 'first prompt', execution: { permission: 'workspace-write' } } });
+    expect(f.set).not.toHaveBeenCalled();
+  });
+  it('rejects the removed slash switch as an unknown peer settings field', async () => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    await expect(f.service.savePeerSettings(f.key, before.policy.version, { slashCommands: true })).rejects.toThrow('原生输入框中设置');
+    expect(f.service.requireEntry(f.key)).toEqual(before); expect(f.set).not.toHaveBeenCalled();
+  });
+  it('keeps a custom tool mask independent of the native permission', async () => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    await f.service.savePeerSettings(f.key, before.policy.version, { toolScope: { kind: 'custom', tools: ['read'] } });
+    expect(f.service.requireEntry(f.key).settings!.execution).toEqual({ kind: 'custom', permission: 'workspace-write', tools: ['read'] });
+    expect(f.permission()).toBe('workspace-write'); expect(f.set).not.toHaveBeenCalled();
+    f.changeNative('read-only');
+    const current = f.service.requireEntry(f.key);
+    await f.service.savePeerSettings(f.key, current.policy.version, { promptGroup: 'another prompt' });
+    expect(f.service.requireEntry(f.key).settings!.execution).toEqual({ kind: 'custom', permission: 'read-only', tools: ['read'] });
+    expect(f.set).not.toHaveBeenCalled();
+  });
+  it('applies an explicit native permission even if it equals an old stored default', async () => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    await f.service.savePeerSettings(f.key, before.policy.version, { permission: 'read-only', expectedPermission: 'workspace-write' });
+    expect(f.set).toHaveBeenCalledExactlyOnceWith(f.session, 'read-only');
+    expect(f.permission()).toBe('read-only');
+  });
+  it('rejects a stale native permission draft without changing either state', async () => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    await expect(f.service.savePeerSettings(f.key, before.policy.version, { permission: 'read-only', expectedPermission: 'danger-full-access' })).rejects.toThrow('原生执行权限已变化');
+    expect(f.service.requireEntry(f.key)).toEqual(before); expect(f.set).not.toHaveBeenCalled();
+  });
+  it('selects an additional Host preset and clears the QQ mask in one settings commit', async () => {
+    const f = peerFixture();
+    const before = f.service.requireEntry(f.key);
+    await f.service.savePeerSettings(f.key, before.policy.version, { toolScope: { kind: 'custom', tools: ['read'] } });
+    f.services.permissionPresets.catalog = () => ({ options: [{ value: 'reviewed-full-access' }, { value: 'workspace-write' }] });
+    f.services.sandboxPolicy.resolve = () => ({ mode: f.permission() === 'reviewed-full-access' ? 'danger-full-access' : 'workspace-write' });
+    const masked = f.service.requireEntry(f.key);
+    await f.service.savePeerSettings(f.key, masked.policy.version, { nativePermission: 'reviewed-full-access', expectedPermission: 'workspace-write', toolScope: { kind: 'native' } });
+    const next = f.service.requireEntry(f.key);
+    expect(next.settings!.execution).toEqual({ kind: 'native', permission: 'danger-full-access' });
+    expect(next.policy.nativeTools).toBe(true);
+    expect(f.permission()).toBe('reviewed-full-access');
+    expect(next.currentSessionId).toBe(before.currentSessionId);
+    expect(f.select).not.toHaveBeenCalled();
+  });
+  it('restores the native preset when a combined native choice and QQ scope save fails', async () => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    f.services.permissionPresets.catalog = () => ({ options: [{ value: 'reviewed-full-access' }, { value: 'workspace-write' }] });
+    f.services.sandboxPolicy.resolve = () => ({ mode: f.permission() === 'reviewed-full-access' ? 'danger-full-access' : 'workspace-write' });
+    f.failCatalogSave();
+    await expect(f.service.savePeerSettings(f.key, before.policy.version, { nativePermission: 'reviewed-full-access', expectedPermission: 'workspace-write', toolScope: { kind: 'native' } })).rejects.toThrow(/EISDIR|rename/);
+    expect(f.permission()).toBe('workspace-write');
+    expect(f.service.requireEntry(f.key)).toEqual(before);
+  });
+  it.each(['qqbot-ui-custom-tools', 'missing-preset'])('rejects an unregistered native permission %s without persisting a UI-only identity', async nativePermission => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    await expect(f.service.savePeerSettings(f.key, before.policy.version, { nativePermission, expectedPermission: 'workspace-write' })).rejects.toThrow('原生权限预设当前不可用');
+    expect(f.service.requireEntry(f.key)).toEqual(before); expect(f.set).not.toHaveBeenCalled();
+  });
+  it('rechecks native permission after restoring the Agent before committing a tool edit', async () => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    f.manager.restoreExisting = async () => { f.changeNative('danger-full-access'); return f.service.manager.getSessionRecord('group', 'g'); };
+    await expect(f.service.savePeerSettings(f.key, before.policy.version, { toolScope: { kind: 'custom', tools: [] } })).rejects.toThrow('原生执行权限已变化');
+    expect(f.service.requireEntry(f.key)).toEqual(before); expect(f.set).not.toHaveBeenCalled();
+  });
+  it.each(['model', 'preset', 'cwd'])('rejects the hidden native field %s in a QQ patch', async field => {
+    const f = peerFixture(); const before = f.service.requireEntry(f.key);
+    await expect(f.service.savePeerSettings(f.key, before.policy.version, { [field]: 'unexpected' })).rejects.toThrow('原生输入框');
+    expect(f.service.requireEntry(f.key)).toEqual(before);
+  });
+  it('applies inherited-model effort changes and resets the live Session to the host default effort', async () => {
+    const f = fixture();
+    const hostDefault = { provider: 'p', model: 'old', reasoningEffort: ReasoningEffortId('medium') };
+    vi.spyOn(f.manager, 'getDefaultModel').mockReturnValue(hostDefault);
+    for (const effort of [ReasoningEffortId('high'), ReasoningEffortId('low'), undefined]) {
+      const before = f.service.requireEntry(f.key);
+      const { reasoningEffort: _previousEffort, ...base } = before.settings!;
+      const settings = { ...base, ...(effort ? { reasoningEffort: effort } : {}) };
+      await f.service.saveSettings(f.key, before.policy.version, settings, before.alias, true);
+      expect(f.select).toHaveBeenLastCalledWith({ ...hostDefault, reasoningEffort: effort ?? hostDefault.reasoningEffort });
+      expect(f.agent.model.current()).toEqual({ ...hostDefault, reasoningEffort: effort ?? hostDefault.reasoningEffort });
+      expect(f.service.requireEntry(f.key).settings).toEqual(settings);
+      expect(f.service.requireEntry(f.key).currentSessionId).toBe(f.session.id);
+    }
+    expect(f.select).toHaveBeenCalledTimes(3);
+  });
+  it('ignores the inherited effort when an explicit model supplies its own effort', async () => {
+    const f = fixture(); const before = f.service.requireEntry(f.key);
+    const model = { provider: 'p', model: 'new', reasoningEffort: ReasoningEffortId('low') };
+    await f.service.saveSettings(f.key, before.policy.version, { ...before.settings!, model }, '', true);
+    const current = f.service.requireEntry(f.key);
+    await f.service.saveSettings(f.key, current.policy.version, { ...current.settings!, reasoningEffort: ReasoningEffortId('high') }, '', true);
+    expect(f.select).toHaveBeenCalledExactlyOnceWith(model);
+    expect(f.agent.model.current()).toEqual(model);
+  });
+  it('restores the live inherited model when persisting an effort change fails', async () => {
+    const f = fixture(); const before = f.service.requireEntry(f.key);
+    setSandboxMode(f.session, 'read-only');
+    f.session.append('permission/preset', { preset: 'read-only' });
+    f.failCatalogSave();
+    await expect(f.service.saveSettings(f.key, before.policy.version, { ...before.settings!, reasoningEffort: ReasoningEffortId('high') }, '', true)).rejects.toThrow(/EISDIR|rename/);
+    expect(f.select.mock.calls).toEqual([[{ provider: 'p', model: 'old', reasoningEffort: ReasoningEffortId('high') }], [{ provider: 'p', model: 'old' }]]);
+    expect(f.agent.model.current()).toEqual({ provider: 'p', model: 'old' });
+    expect(f.service.requireEntry(f.key)).toEqual(before);
+  });
+  it('applies model and native setters; extra prompt applies immediately while cwd/preset defer to the next Session', async () => {
+    const f = fixture(); const before = f.service.requireEntry(f.key);
+    const tail = 'LAST_GROUP_INSTRUCTION';
+    const prompt = 'x'.repeat(QQ_EXTRA_PROMPT_MAX_CHARS - tail.length) + tail;
+    const settings = { ...before.settings!, model: { provider: 'p', model: 'new' }, promptGroup: prompt, promptDirect: 'PRIVATE_SCOPE_ONLY', cwd: '/tmp/next-cwd', preset: 'chosen', execution: { kind: 'native' as const, permission: 'workspace-write' as const } };
+    const notice = await f.service.saveSettings(f.key, before.policy.version, settings, 'alias', true);
+    expect(notice).toContain('新会话生效');
+    expect(f.select).toHaveBeenCalledExactlyOnceWith(settings.model);
+    expect(f.session.snapshotEvents()).toContainEqual(expect.objectContaining({ type: 'sandbox/mode', data: { mode: 'workspace-write' } }));
+    expect(f.session.snapshotEvents()).toContainEqual(expect.objectContaining({ type: 'approval/policy', data: { policy: 'ask' } }));
+    // 补充提示词即时生效：保存后当前 session 的人设 prompt 立刻反映新值。
+    expect(f.service.rolePrompt(f.session.id)).toContain(prompt);
+    expect(f.service.rolePrompt(f.session.id)).not.toContain('PRIVATE_SCOPE_ONLY');
+    expect(f.service.requireEntry(f.key).currentSessionId).toBe(f.session.id);
+    expect(f.service.requireEntry(f.key).settings).toEqual(settings);
+    expect(f.agent.cancel).not.toHaveBeenCalled();
+    f.service.store.bindSession(f.key, 'next'); expect(f.service.rolePrompt('next')).toContain(prompt);
+  });
+  it.each(['promptGroup', 'promptDirect'])('rejects an over-limit %s before changing live or persisted settings', async field => {
+    const f = fixture();
+    const before = f.service.requireEntry(f.key);
+    const events = f.session.snapshotEvents();
+    const settings = { ...before.settings!, [field]: 'x'.repeat(QQ_EXTRA_PROMPT_MAX_CHARS + 1), model: { provider: 'p', model: 'new' } };
+    await expect(f.service.saveSettings(f.key, before.policy.version, settings, 'rejected alias', false)).rejects.toThrow('不能超过 80000 个字符');
+    expect(f.service.requireEntry(f.key)).toEqual(before);
+    expect(f.session.snapshotEvents()).toEqual(events);
+    expect(f.select).not.toHaveBeenCalled();
+  });
+  it('rejects busy edits and recording conflicts before changing live or persisted settings', async () => {
+    const f = fixture(); const before = f.service.requireEntry(f.key);
+    const settings = { ...before.settings!, model: { provider: 'p', model: 'new' } };
+    Object.assign(f.agent, { status: 'running' });
+    await expect(f.service.saveSettings(f.key, before.policy.version, settings, '', true)).rejects.toThrow('正在生成');
+    Object.assign(f.agent, { status: 'idle' });
+    expect(f.service.requireEntry(f.key)).toEqual(before); expect(f.select).not.toHaveBeenCalled();
+  });
+  it.each([
+    { permissions: 'absent', pendingChange: false },
+    { permissions: 'named', pendingChange: false },
+    { permissions: 'derived custom', pendingChange: false },
+    { permissions: 'absent', pendingChange: true },
+  ])('restores actual native knobs and model after a catalog write fails with $permissions permissions and pending change $pendingChange', async ({ permissions, pendingChange }) => {
+    const f = fixture();
+    let identity = 'reviewed-full-access';
+    if (permissions !== 'absent') {
+      const bundles = new Map<string, { sandbox: SandboxMode; approval: ApprovalPolicy }>([
+        ['reviewed-full-access', { sandbox: 'danger-full-access', approval: 'ask' }],
+        ['workspace-write', { sandbox: 'workspace-write', approval: 'ask' }],
+      ]);
+      f.services.permissionPresets = {
+        catalog: () => ({ options: [...bundles.keys(), 'custom'].map(value => ({ value })) }),
+        current: () => permissions === 'derived custom' ? 'custom' : identity,
+        set: (session: Session, value: string) => {
+          const bundle = bundles.get(value);
+          if (!bundle) throw new Error('Unknown permission preset');
+          identity = value;
+          session.append('permission/preset', { preset: value });
+          setSandboxMode(session, bundle.sandbox);
+          setApprovalPolicy(session, bundle.approval);
+        },
+      };
+      f.session.append('permission/preset', { preset: identity });
+    }
+    setSandboxMode(f.session, pendingChange ? 'read-only' : 'danger-full-access');
+    setApprovalPolicy(f.session, 'ask');
+    const before = f.service.requireEntry(f.key);
+    f.failCatalogSave();
+    let maintenanceEntered = () => {};
+    let continueMaintenance = () => {};
+    const entered = new Promise<void>(resolve => { maintenanceEntered = resolve; });
+    const continuation = new Promise<void>(resolve => { continueMaintenance = resolve; });
+    if (pendingChange) vi.spyOn(f.agent, 'runMaintenance').mockImplementation(async task => {
+      maintenanceEntered();
+      await continuation;
+      return task(new AbortController().signal);
+    });
+    const saving = f.service.saveSettings(f.key, before.policy.version, {
+      ...before.settings!, model: { provider: 'p', model: 'new' },
+      execution: { kind: 'native', permission: 'workspace-write' },
+    }, 'rejected alias', true);
+    if (pendingChange) {
+      await entered;
+      setSandboxMode(f.session, 'danger-full-access');
+      setApprovalPolicy(f.session, 'ask');
+      continueMaintenance();
+    }
+    await expect(saving).rejects.toThrow(/EISDIR|rename/);
+    expect(f.service.requireEntry(f.key)).toEqual(before);
+    expect(f.agent.model.current()).toEqual({ provider: 'p', model: 'old' });
+    expect(f.session.snapshotEvents().filter(event => event.type === 'sandbox/mode').at(-1)?.data).toEqual({ mode: 'danger-full-access' });
+    expect(f.session.snapshotEvents().filter(event => event.type === 'approval/policy').at(-1)?.data).toEqual({ policy: 'ask' });
+    if (permissions === 'named') {
+      expect(identity).toBe('reviewed-full-access');
+      expect(f.session.snapshotEvents().filter(event => event.type === 'permission/preset').at(-1)?.data).toEqual({ preset: 'reviewed-full-access' });
+    }
+  });
+  it('reports that the global access gate still blocks a locally enabled peer', async () => {
+    const f = fixture(); f.config.access.groupMode = 'disabled'; const before = f.service.requireEntry(f.key);
+    const notice = await f.service.saveSettings(f.key, before.policy.version, before.settings, '', true);
+    expect(f.service.admitted('group', 'g')).toBe(false); expect(notice).toContain('全局访问规则阻止');
+  });
+});

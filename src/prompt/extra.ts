@@ -4,7 +4,7 @@
 export const EXTRA_SECTION_NAME = 'qqbot:extra';
 export const EXTRA_ORDER = 460;
 
-export const EXTRA_MAX_CHARS = 80_000;
+export { QQ_EXTRA_PROMPT_MAX_CHARS as EXTRA_MAX_CHARS } from '../shared/agent-settings.ts';
 
 export interface ScopePrompts { group?: string; direct?: string }
 
